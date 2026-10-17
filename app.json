@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Cortexa",
+    "slug": "cortexa",
+    "scheme": "cortexa",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.cortexa.study" },
+    "android": { "package": "com.cortexa.study", "edgeToEdgeEnabled": true },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "Cortexa · Seu próximo passo na Medicina"
+    },
+    "plugins": ["expo-router", "expo-font"],
+    "experiments": { "typedRoutes": true }
+  }
+}

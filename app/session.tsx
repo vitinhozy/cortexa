@@ -5,12 +5,22 @@ import { Screen, Card, T, Button, Badge, Section, Empty, Notice, Icon, s } from 
 import { useStudy } from '@/hooks/useStudy';
 import { colors, fonts } from '@/constants/theme';
 import { recommendTopics } from '@/features/study/engine';
+import { useMotion } from '@/hooks/useMotion';
+import { Reveal } from '@/components/Motion';
+import { useAppNavigation } from '@/hooks/useAppNavigation';
 export default function SessionScreen() {
-  const { topicId, daily } = useLocalSearchParams<{ topicId?: string; daily?: string }>();
-  const { data, services } = useStudy();
+  const { replace } = useAppNavigation();
+  const { topicId, daily, materialId } = useLocalSearchParams<{
+    topicId?: string;
+    daily?: string;
+    materialId?: string;
+  }>();
+  const { data, services, mode } = useStudy();
+  const { tap } = useMotion();
+  const material = data.materials.find((item) => item.id === materialId);
   const topic =
     data.topics.find((t) => t.id === topicId) ??
-    (!topicId ? recommendTopics(data)[0].topic : undefined);
+    (!topicId ? recommendTopics(data)[0]?.topic : undefined);
   const [startedAt] = useState(() => new Date().toISOString());
   const [finished, setFinished] = useState(false);
   const [error, setError] = useState('');
@@ -33,16 +43,18 @@ export default function SessionScreen() {
     >
       {finished ? (
         <>
-          <Card style={{ alignItems: 'center', padding: 35 }}>
-            <Icon name="check-circle" size={40} />
-            <T style={s.sectionTitle}>Sessão concluída</T>
-            <Badge label="+20 XP" />
-            <T muted style={{ textAlign: 'center' }}>
-              O tempo é registrado em minutos completos. Continue com uma revisão ou acompanhe seu
-              mapa.
-            </T>
-          </Card>
-          <Button title="Ver meu progresso" onPress={() => router.replace('/knowledge')} />
+          <Reveal>
+            <Card style={{ alignItems: 'center', padding: 35 }}>
+              <Icon name="check-circle" size={40} />
+              <T style={s.sectionTitle}>Sessão concluída</T>
+              <Badge label="+20 XP" />
+              <T muted style={{ textAlign: 'center' }}>
+                O tempo é registrado em minutos completos. Continue com uma revisão ou acompanhe seu
+                mapa.
+              </T>
+            </Card>
+          </Reveal>
+          <Button title="Ver meu progresso" onPress={() => replace('/knowledge')} />
         </>
       ) : (
         <>
@@ -52,9 +64,11 @@ export default function SessionScreen() {
           </View>
           <Card>
             <T style={s.sectionTitle}>Primeiro, conecte o conceito.</T>
-            <T style={{ lineHeight: 26, fontSize: 16 }}>{topic.summary}</T>
+            <T style={{ lineHeight: 26, fontSize: 16 }}>
+              {material?.topicId === topic.id ? material.content : topic.summary}
+            </T>
           </Card>
-          <Section title="Leve estas ideias com você" />
+          {topic.keyPoints.length ? <Section title="Leve estas ideias com você" /> : null}
           {topic.keyPoints.map((point, i) => (
             <Card key={point}>
               <View style={[s.row, { alignItems: 'flex-start' }]}>
@@ -74,7 +88,13 @@ export default function SessionScreen() {
               </View>
             </Card>
           ))}
-          <Notice text="Conteúdo demonstrativo simplificado, exclusivo para estudo. Os exemplos não foram gerados a partir de um material real." />
+          <Notice
+            text={
+              mode === 'demo'
+                ? 'Conteúdo demonstrativo simplificado, exclusivo para estudo. Os exemplos não foram gerados a partir de um material real.'
+                : 'Anotação escrita por você. Nenhum resumo ou conteúdo adicional foi gerado por IA.'
+            }
+          />
           <Section title="Agora, pratique" />
           <Button
             title="Praticar questões"
@@ -99,13 +119,19 @@ export default function SessionScreen() {
             icon="zap"
             variant="secondary"
             onPress={() => router.push('/tutor')}
+            disabled={mode === 'personal'}
           />
           <Button
             title="Concluir sessão"
             variant="ghost"
             onPress={async () => {
               try {
-                await services.studyService.finish(topic.id, startedAt);
+                await services.studyService.finish(
+                  topic.id,
+                  startedAt,
+                  material?.id ? [`material:${material.id}`] : [],
+                );
+                tap('success');
                 setFinished(true);
               } catch {
                 setError('Não foi possível concluir. Tente novamente.');

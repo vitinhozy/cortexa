@@ -10,14 +10,14 @@ import type {
   ReviewRating,
   StudyMaterial,
   StudyPlan,
-  User,
 } from '@/types/domain';
-export interface AuthService {
-  currentUser(): Promise<User>;
-}
 export interface MaterialService {
   list(): Promise<StudyMaterial[]>;
-  addNote(title: string, content: string): Promise<StudyMaterial>;
+  addNote(
+    title: string,
+    content: string,
+    context?: { subjectId: string; topicName: string; folderId?: string },
+  ): Promise<StudyMaterial>;
 }
 export interface QuestionService {
   list(topicId?: string): Promise<Question[]>;
@@ -26,13 +26,13 @@ export interface QuestionService {
 export interface FlashcardService {
   list(topicId?: string): Promise<Flashcard[]>;
   fromQuestion(questionId: string): Promise<Flashcard>;
-  review(id: string, rating: ReviewRating): Promise<void>;
+  review(id: string, rating: ReviewRating, operationId?: string): Promise<void>;
 }
 export interface KnowledgeService {
   list(): Promise<KnowledgeMetric[]>;
 }
 export interface StudyService {
-  finish(topicId: string, startedAt: string): Promise<void>;
+  finish(topicId: string, startedAt: string, sourceIds?: string[]): Promise<void>;
   plan(topicIds: string[], minutes: number, examDate: string): Promise<StudyPlan>;
 }
 export interface AIService {
@@ -55,13 +55,7 @@ export interface Repository {
   update(transform: (data: AppData) => AppData): void;
 }
 // Future server-side contracts. Provider secrets and actual retrieval never live in the app.
-export type AITask = 'summary' | 'question-generation' | 'tutoring' | 'image-analysis';
-export interface AIRouter {
-  route(task: AITask): {
-    capability: 'economical' | 'advanced' | 'multimodal';
-    provider: 'mock' | 'server';
-  };
-}
+export type { AITask, AIRouter } from '@/types/ai';
 export interface RetrievedChunk {
   id: string;
   materialId: string;

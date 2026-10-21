@@ -1,17 +1,20 @@
-import { View, useWindowDimensions } from 'react-native';
+import { View } from 'react-native';
 import { router } from 'expo-router';
 import { Screen, Card, T, Icon, Badge, Button, s } from '@/components/ui';
-import { colors, fonts } from '@/constants/theme';
-import { studyTools } from '@/mocks/navigation';
+import { colors, fonts, themeTint } from '@/constants/theme';
+import { studyTools } from '@/constants/studyTools';
+import { useStudy } from '@/hooks/useStudy';
+import { useAvailableWidth } from '@/hooks/useAvailableWidth';
 export default function StudyScreen() {
-  const wide = useWindowDimensions().width > 650;
+  const { mode } = useStudy();
+  const wide = useAvailableWidth() > 650;
   return (
     <Screen
       title="Seu espaço de estudo"
       subtitle="Entender. Praticar. Lembrar. Escolha seu próximo passo."
       eyebrow="APRENDER COM INTENÇÃO"
     >
-      <Card style={{ backgroundColor: colors.mint, borderColor: '#D5E8DC' }}>
+      <Card style={{ backgroundColor: colors.lavender, borderColor: colors.lavenderLine }}>
         <View style={s.row}>
           <Icon name="sunrise" size={25} />
           <View style={{ flex: 1 }}>
@@ -29,17 +32,25 @@ export default function StudyScreen() {
           onPress={() => router.push({ pathname: '/planner', params: { urgent: 'true' } })}
         />
       </Card>
+      <T style={s.sectionTitle}>Prática e revisão</T>
       <View style={s.grid}>
         {studyTools.map((tool) => (
           <Card
             key={tool.title}
             label={tool.title}
-            onPress={() => router.push({ pathname: tool.route, params: tool.params })}
+            onPress={() =>
+              router.push({
+                pathname: tool.route,
+                params: mode === 'personal' && tool.route === '/session' ? {} : tool.params,
+              })
+            }
             style={{ width: wide ? '48%' : '100%', flexGrow: 1 }}
           >
             <View style={[s.row, { justifyContent: 'space-between' }]}>
-              <View style={{ backgroundColor: tool.color, padding: 12, borderRadius: 13 }}>
-                <Icon name={tool.icon} />
+              <View
+                style={{ backgroundColor: themeTint(tool.color), padding: 12, borderRadius: 13 }}
+              >
+                <Icon name={tool.icon} color={themeTint(colors.primary, '#B69AFF')} />
               </View>
               <Icon name="arrow-up-right" color={colors.muted} size={18} />
             </View>

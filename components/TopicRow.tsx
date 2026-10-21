@@ -11,16 +11,21 @@ export function TopicRow({
   topic,
   metric,
   compact = false,
+  onPress,
 }: {
   topic: Topic;
   metric: KnowledgeMetric;
   compact?: boolean;
+  onPress?: () => void;
 }) {
   const color = masteryColor(metric.mastery);
+  const measured = metric.answered > 0;
   return (
     <Card
-      onPress={() => router.push({ pathname: '/topic/[id]', params: { id: topic.id } })}
-      label={`${topic.name}, ${metric.mastery}%`}
+      onPress={
+        onPress ?? (() => router.push({ pathname: '/topic/[id]', params: { id: topic.id } }))
+      }
+      label={`${topic.name}, ${measured ? `${metric.mastery}%` : 'ainda sem prática'}`}
       style={{ padding: compact ? 16 : 21 }}
     >
       <View style={[s.row, { justifyContent: 'space-between' }]}>
@@ -28,14 +33,16 @@ export function TopicRow({
           <T style={{ fontFamily: fonts.medium, fontSize: compact ? 13 : 15 }}>{topic.name}</T>
           {!compact ? (
             <T muted style={{ fontSize: 11 }}>
-              {masteryLabel(metric.mastery)}
+              {measured ? masteryLabel(metric.mastery) : 'Ainda sem prática suficiente'}
             </T>
           ) : null}
         </View>
-        <T style={{ color, fontFamily: fonts.semibold }}>{metric.mastery}%</T>
+        <T style={{ color: measured ? color : colors.muted, fontFamily: fonts.semibold }}>
+          {measured ? `${metric.mastery}%` : '—'}
+        </T>
         <Icon name="chevron-right" size={16} color={colors.muted} />
       </View>
-      <Progress value={metric.mastery} color={color} />
+      {measured ? <Progress value={metric.mastery} color={color} /> : null}
     </Card>
   );
 }

@@ -1,6 +1,8 @@
-import type { ComponentProps, PropsWithChildren } from 'react';
+import { useEffect, useRef, type ComponentProps, type PropsWithChildren } from 'react';
 import {
   Pressable,
+  Animated,
+  Easing,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,8 +16,15 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Feather from '@expo/vector-icons/Feather';
-import { router } from 'expo-router';
-import { colors, fonts } from '@/constants/theme';
+import { colors, fonts, readableAccentText, themeTint } from '@/constants/theme';
+import { useStudy } from '@/hooks/useStudy';
+import { ScreenMotion, Touch } from './Motion';
+import { useMotion } from '@/hooks/useMotion';
+import { useAppNavigation } from '@/hooks/useAppNavigation';
+import type { Href } from 'expo-router';
+import { useLocalSearchParams, usePathname } from 'expo-router';
+import { navigationLocation } from '@/constants/navigation';
+import { NavigationTrail } from './NavigationTrail';
 export type IconName = ComponentProps<typeof Feather>['name'];
 export function Icon({
   name,
@@ -45,8 +54,12 @@ export function T({
 }: PropsWithChildren<
   Omit<TextProps, 'style'> & { style?: TextStyle | TextStyle[]; muted?: boolean }
 >) {
+  const declaredColor = StyleSheet.flatten(style)?.color;
+  const resolvedColor = readableAccentText(
+    typeof declaredColor === 'string' ? declaredColor : muted ? colors.muted : colors.ink,
+  );
   return (
-    <Text {...props} style={[s.text, muted && { color: colors.muted }, style]}>
+    <Text {...props} style={[s.text, style, { color: resolvedColor }]}>
       {children}
     </Text>
   );
@@ -56,77 +69,144 @@ export function Screen({
   title,
   subtitle,
   back = false,
+  backTo,
+  onBack,
+  scrollResetKey,
   eyebrow,
   action,
+  topAction,
+  footer,
+  overlay,
+  contentMaxWidth,
 }: PropsWithChildren<{
   title: string;
   subtitle?: string;
   back?: boolean;
+  backTo?: Href;
+  onBack?: () => void;
+  scrollResetKey?: string | number;
   eyebrow?: string;
   action?: React.ReactNode;
+  topAction?: React.ReactNode;
+  searchable?: boolean;
+  footer?: React.ReactNode;
+  overlay?: React.ReactNode;
+  contentMaxWidth?: number;
 }>) {
   const { width } = useWindowDimensions();
+  const { mode, repository, data } = useStudy();
+  const pathname = usePathname();
+  const params = useLocalSearchParams();
+  const location = navigationLocation(
+    pathname,
+    {
+      ...params,
+      kind: params.kind ?? data.studio?.find((document) => document.id === params.id)?.kind,
+    },
+    title,
+  );
   const insets = useSafeAreaInsets();
+  const { goBack } = useAppNavigation();
+  const scroll = useRef<ScrollView>(null);
+  useEffect(() => {
+    if (scrollResetKey !== undefined) scroll.current?.scrollTo({ y: 0, animated: false });
+  }, [scrollResetKey]);
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={s.safe}>
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[
-          s.container,
-          { paddingHorizontal: width < 600 ? 22 : 40, paddingBottom: 24 + insets.bottom },
-        ]}
+    <ScreenMotion>
+      <SafeAreaView
+        testID="screen-root"
+        edges={['top', 'left', 'right']}
+        style={[s.safe, { backgroundColor: colors.background }]}
       >
-        <View style={s.topline}>
-          {back ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Voltar"
-              onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-              style={s.back}
-            >
-              <Icon name="arrow-left" />
-              <T style={{ fontSize: 13 }}>Voltar</T>
-            </Pressable>
-          ) : (
-            <View style={s.row}>
-              <View style={s.brandIcon}>
-                <Icon name="activity" color="white" size={17} />
-              </View>
-              <T style={s.brand}>
-                cortexa<T style={{ color: colors.primary }}>.</T>
-              </T>
-            </View>
-          )}
-          <Badge label="DEMONSTRAÇÃO" tone="neutral" />
-        </View>
-        <View
-          style={[
-            s.row,
-            { justifyContent: 'space-between', marginBottom: 24, alignItems: 'flex-start' },
+        <ScrollView
+          ref={scroll}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[
+            s.container,
+            contentMaxWidth ? { maxWidth: contentMaxWidth } : undefined,
+            { paddingHorizontal: width < 600 ? 22 : 40, paddingBottom: 24 + insets.bottom },
           ]}
         >
-          <View style={{ flex: 1 }}>
-            {eyebrow ? <T style={s.eyebrow}>{eyebrow}</T> : null}
-            <T style={[s.title, { fontSize: width < 390 ? 28 : 32 }]}>{title}</T>
-            {subtitle ? (
-              <T muted style={{ marginTop: 8, lineHeight: 23 }}>
-                {subtitle}
+          <View style={s.topline}>
+            {back ? (
+              <Touch
+                accessibilityRole="button"
+                accessibilityLabel="Voltar"
+                onPress={() => (onBack ? onBack() : goBack(backTo ?? location.fallback))}
+                style={s.back}
+              >
+                <Icon name="chevron-left" size={25} />
+                <T style={{ fontSize: 13 }}>Voltar</T>
+              </Touch>
+            ) : (
+              <NavigationTrail location={location} />
+            )}
+            <View style={[s.row, { gap: width < 380 ? 3 : 8 }]}>
+              {topAction}
+              <Badge label={mode === 'demo' ? 'DEMONSTRAÇÃO' : 'PESSOAL · LOCAL'} tone="neutral" />
+            </View>
+          </View>
+          {back ? (
+            <View style={{ marginBottom: 14 }}>
+              <NavigationTrail location={location} />
+            </View>
+          ) : null}
+          <View
+            style={[
+              s.row,
+              { justifyContent: 'space-between', marginBottom: 24, alignItems: 'flex-start' },
+            ]}
+          >
+            <View style={{ flex: 1 }}>
+              {eyebrow ? (
+                <T style={[s.eyebrow, { color: themeTint(colors.primary, '#B99AFF') }]}>
+                  {eyebrow}
+                </T>
+              ) : null}
+              <T accessibilityRole="header" style={[s.title, { fontSize: width < 390 ? 28 : 32 }]}>
+                {title}
               </T>
+              {subtitle ? (
+                <T muted style={{ marginTop: 8, lineHeight: 23 }}>
+                  {subtitle}
+                </T>
+              ) : null}
+            </View>
+            {action}
+          </View>
+          <View style={{ gap: 24 }}>
+            {repository.storageError ? (
+              <Notice text="Não foi possível acessar o armazenamento local. Alterações podem existir apenas nesta sessão; não feche o app antes de guardar suas anotações." />
             ) : null}
+            {children}
           </View>
-          {action}
-        </View>
-        <View style={{ gap: 24 }}>{children}</View>
-        <View style={s.footer}>
-          <View style={[s.row, { gap: 6 }]}>
-            <Icon name="shield" size={13} color={colors.muted} />
-            <T muted style={{ fontSize: 11 }}>
-              Seu espaço para aprender, um passo de cada vez.
-            </T>
+          <View style={s.footer}>
+            <View style={[s.row, { gap: 6 }]}>
+              <Icon name="shield" size={13} color={colors.muted} />
+              <T muted style={{ fontSize: 11 }}>
+                Seu espaço para aprender, um passo de cada vez.
+              </T>
+            </View>
           </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+        </ScrollView>
+        {footer ? (
+          <View
+            style={{
+              width: '100%',
+              maxWidth: 900,
+              alignSelf: 'center',
+              paddingHorizontal: width < 600 ? 16 : 40,
+              paddingTop: 8,
+              paddingBottom: 12,
+              backgroundColor: colors.background,
+            }}
+          >
+            {footer}
+          </View>
+        ) : null}
+        {overlay}
+      </SafeAreaView>
+    </ScreenMotion>
   );
 }
 export function Card({
@@ -134,22 +214,30 @@ export function Card({
   style,
   onPress,
   label,
-}: PropsWithChildren<{ style?: ViewStyle; onPress?: () => void; label?: string }>) {
+  testID,
+}: PropsWithChildren<{
+  style?: ViewStyle;
+  onPress?: () => void;
+  label?: string;
+  testID?: string;
+}>) {
   return onPress ? (
-    <Pressable
+    <Touch
+      testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      style={({ pressed }) => [
-        s.card,
-        style,
-        pressed && { opacity: 0.8, transform: [{ scale: 0.995 }] },
-      ]}
+      style={[s.card, { backgroundColor: colors.surface, borderColor: colors.line }, style]}
     >
       {children}
-    </Pressable>
+    </Touch>
   ) : (
-    <View style={[s.card, style]}>{children}</View>
+    <View
+      testID={testID}
+      style={[s.card, { backgroundColor: colors.surface, borderColor: colors.line }, style]}
+    >
+      {children}
+    </View>
   );
 }
 export function Button({
@@ -169,49 +257,60 @@ export function Button({
 }) {
   const color = variant === 'primary' ? 'white' : colors.primaryDark;
   return (
-    <Pressable
+    <Touch
       accessibilityRole="button"
       accessibilityLabel={title}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [
+      style={[
         s.button,
         {
           backgroundColor:
             variant === 'primary'
               ? colors.primary
               : variant === 'secondary'
-                ? colors.mint
+                ? colors.lavender
                 : variant === 'light'
                   ? colors.lime
                   : 'transparent',
           minHeight: small ? 44 : 50,
-          opacity: disabled ? 0.45 : pressed ? 0.75 : 1,
         },
       ]}
     >
       {icon ? <Icon name={icon} size={17} color={color} /> : null}
-      <T style={{ fontFamily: fonts.semibold, fontSize: small ? 13 : 14, color }}>{title}</T>
-    </Pressable>
+      <T
+        style={{
+          fontFamily: fonts.semibold,
+          fontSize: small ? 13 : 14,
+          color,
+          flexShrink: 1,
+          textAlign: 'center',
+        }}
+      >
+        {title}
+      </T>
+    </Touch>
   );
 }
 export function Badge({
   label,
-  tone = 'green',
+  tone = 'purple',
 }: {
   label: string;
-  tone?: 'green' | 'amber' | 'red' | 'neutral' | 'blue';
+  tone?: 'green' | 'purple' | 'amber' | 'red' | 'neutral' | 'blue';
 }) {
   const bg = {
+    purple: colors.lavender,
     green: colors.mint,
     amber: colors.amberLight,
     red: colors.redLight,
-    neutral: '#EDF0EF',
+    neutral: colors.neutral,
     blue: colors.blueLight,
   }[tone];
   const fg = {
-    green: colors.primary,
+    purple: colors.primaryDark,
+    green: colors.teal,
     amber: colors.amber,
     red: colors.red,
     neutral: colors.muted,
@@ -268,16 +367,34 @@ export function Progress({
   color?: string;
   height?: number;
 }) {
+  const { reduced } = useMotion();
+  const safeValue = Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0;
+  const animated = useRef(new Animated.Value(safeValue)).current;
+  useEffect(() => {
+    animated.stopAnimation();
+    if (reduced) animated.setValue(safeValue);
+    else
+      Animated.timing(animated, {
+        toValue: safeValue,
+        duration: 450,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start();
+    return () => animated.stopAnimation();
+  }, [animated, safeValue, reduced]);
   return (
     <View
       accessibilityRole="progressbar"
-      accessibilityValue={{ min: 0, max: 100, now: Math.round(value) }}
-      style={{ height, borderRadius: 9, backgroundColor: '#EDF1EF', overflow: 'hidden' }}
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(safeValue) }}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(safeValue)}
+      style={{ height, borderRadius: 9, backgroundColor: colors.neutral, overflow: 'hidden' }}
     >
-      <View
+      <Animated.View
         style={{
           height,
-          width: `${Math.min(100, Math.max(0, value))}%`,
+          width: animated.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }),
           borderRadius: 9,
           backgroundColor: color,
         }}
@@ -296,6 +413,7 @@ export function Field(props: TextInputProps & { label: string }) {
         {...rest}
         style={[
           s.input,
+          { backgroundColor: colors.surface, borderColor: colors.line, color: colors.ink },
           rest.multiline && { minHeight: 120, textAlignVertical: 'top' },
           rest.style,
         ]}
@@ -328,7 +446,12 @@ export function Notice({ text }: { text: string }) {
       accessibilityLiveRegion="polite"
       style={[
         s.row,
-        { backgroundColor: colors.mint, borderRadius: 12, padding: 14, alignItems: 'flex-start' },
+        {
+          backgroundColor: colors.lavender,
+          borderRadius: 16,
+          padding: 14,
+          alignItems: 'flex-start',
+        },
       ]}
     >
       <Icon name="info" size={16} />
@@ -375,13 +498,15 @@ export const s = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     padding: 22,
-    borderRadius: 20,
+    borderRadius: 24,
+    borderCurve: 'continuous',
     borderWidth: 1,
     borderColor: colors.line,
     gap: 14,
   },
   button: {
-    borderRadius: 12,
+    borderRadius: 16,
+    borderCurve: 'continuous',
     paddingHorizontal: 18,
     paddingVertical: 12,
     flexDirection: 'row',
@@ -390,7 +515,7 @@ export const s = StyleSheet.create({
     gap: 9,
   },
   input: {
-    backgroundColor: 'white',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.line,
     borderRadius: 12,

@@ -1,10 +1,26 @@
 import { useState } from 'react';
-import { router } from 'expo-router';
 import { View } from 'react-native';
 import { Screen, Card, T, Button, Badge, Progress, Icon, s } from '@/components/ui';
 import { tutorSteps } from '@/mocks/tutor';
 import { colors } from '@/constants/theme';
+import { useStudy } from '@/hooks/useStudy';
+import { useAppNavigation } from '@/hooks/useAppNavigation';
 export default function TutorScreen() {
+  const { dismissTo } = useAppNavigation();
+  const { mode } = useStudy();
+  return mode === 'demo' ? (
+    <DemoTutorScreen />
+  ) : (
+    <Screen title="Tutor" back>
+      <Card>
+        <T>A tutoria com IA ainda não está conectada ao seu espaço pessoal.</T>
+        <Button title="Voltar aos meus materiais" onPress={() => dismissTo('/library')} />
+      </Card>
+    </Screen>
+  );
+}
+function DemoTutorScreen() {
+  const { replace } = useAppNavigation();
   const [step, setStep] = useState(0);
   const [answer, setAnswer] = useState<number>();
   const [score, setScore] = useState(0);
@@ -71,7 +87,7 @@ export default function TutorScreen() {
           </Card>
           <Button
             title="Aplicar em uma questão"
-            onPress={() => router.replace({ pathname: '/questions', params: { topicId: 'acid' } })}
+            onPress={() => replace({ pathname: '/questions', params: { topicId: 'acid' } })}
           />
           <Button
             title="Recomeçar aula"

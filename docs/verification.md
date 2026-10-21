@@ -1,69 +1,81 @@
-# Validação da primeira entrega
+# Validação — fundação pessoal e refinamento visual
 
-Validado em 16 de outubro de 2026 no Windows, Node.js 22.23.3, com Expo SDK 54. Usuário, materiais e casos são fictícios.
+> Registro histórico do incremento anterior. A validação da evolução longitudinal de 18/10/2026 está em [Evolução longitudinal — implementação](learning-implementation.md#validação), incluindo o estado atual dos testes, migrações, ícone e adapters.
 
-## História verificada
+Executada em 17 de outubro de 2026, Windows, Node.js 22.23.3, Expo SDK 54.
 
-O estudante inicia um estudo, responde uma questão, recebe explicações, transforma o erro em flashcard e vê seu progresso atualizado e preservado ao reabrir o aplicativo.
+## Histórias verificadas
 
-| Verificação | Resultado | Evidência |
-| --- | --- | --- |
-| `npm install` | Passou | Instalação inicial e segunda instalação concluídas; lockfile presente |
-| `npm run typecheck` | Passou | TypeScript estrito, sem erros |
-| `npm test` | Passou | 9 testes de domínio/serviços |
-| `npm run test:e2e` | Passou | 5 testes Playwright, Chromium, 25,6 s na execução final |
-| `npm run format:check` | Passou | Todos os arquivos verificados estão formatados |
-| `npx expo install --check` | Passou | `Dependencies are up to date` |
-| `npx expo-doctor` | Passou | 18/18 verificações |
-| `npx expo start --web --port 8081` | Passou | Metro iniciou, bundle servido e interfaces interativas acessadas |
-| Exportação web, iOS e Android | Passou | `npx expo export --platform all --output-dir dist` gerou os três bundles |
-| Console do navegador | Passou nos cenários cobertos | Nenhum `console.error` ou erro de página capturado no teste de rotas |
-| Responsividade | Passou nos tamanhos cobertos | 390 × 844 e 1440 × 1050, sem overflow horizontal do documento |
-| iPhone físico / Android Emulator | Não executado | Não havia aparelho/emulador conectado à validação |
+Demonstração preservada: estudo → questão → erro → flashcard → revisão → progresso persistido.
 
-A exportação dos bundles nativos verifica imports, resolução de dependências e compilação JavaScript/Hermes. Não substitui instalação e interação em um aparelho físico.
+Espaço pessoal: troca de espaço → onboarding → edição de perfil → biblioteca/pastas → anotação por disciplina → favoritos e organização → prova → planejamento → estudo. Recarregar e alternar entre os espaços não deve misturar os dados.
 
-## Cobertura de comportamento
+Refinamento visual: introdução → formulário, abas → busca → conteúdo escolhido, biblioteca → painel de filtros, perfil → preferências → recarga, conta → aviso de login social e Plus → seleção de período → retorno ao acesso gratuito. Nenhum desses fluxos deve simular autenticação, assinatura, push ou IA reais.
 
-### Domínio e serviços — 9 testes
+| Verificação                                        | Resultado                                   |
+| -------------------------------------------------- | ------------------------------------------- |
+| TypeScript estrito — `npm run typecheck`           | Passou                                      |
+| Lint — `npm run lint`                              | Passou, sem avisos                          |
+| Lógica/serviços — `npm test`                       | 26 testes passaram                          |
+| Interface — `npm run test:e2e`                     | 18 testes passaram no Chromium, 3,4 minutos |
+| Formatação — `npm run format:check`                | Passou                                      |
+| `npx expo install --check`                         | Dependencies are up to date                 |
+| `npx expo-doctor`                                  | 18/18 verificações passaram                 |
+| `npx expo export --platform all --output-dir dist` | Bundles web, Android e iOS gerados          |
+| Expo na porta 8081                                 | Servindo o app e os testes de interface     |
+| Supabase Auth remoto                               | Não validado: conector não retornou projeto |
+| Banco, RLS e Storage remotos                       | Ainda não implementados/aplicados           |
+| Expo Go físico / emuladores nativos                | Não executado neste ambiente                |
 
-1. Ácido-base e potássio aparecem antes dos assuntos de alto domínio.
-2. As quatro faixas de domínio respeitam os limites especificados.
-3. Orçamentos de 5, 30, 60, 120, 180 e 480 minutos são respeitados em cada dia do plano.
-4. Revisões ajustam intervalo e data de retorno.
-5. Resposta errada atualiza perfil, métrica e erro apenas uma vez por tentativa.
-6. Resposta correta atualiza acertos sem criar um erro.
-7. Flashcards de questões são deduplicados e persistem com suas revisões.
-8. JSON local inválido recupera os exemplos e sinaliza falha de armazenamento.
-9. Conversas preservam o material e marcam fontes simuladas.
+## Cobertura
 
-### Navegador — 5 testes
+Os 26 testes de lógica verificam as regras de estudo já existentes e os novos limites: espaço pessoal vazio, isolamento entre demonstração/local/duas contas, recusa de snapshot de outro proprietário, preservação de armazenamento corrompido, validação atômica de perfil e provas, notas ligadas à disciplina, pastas/favoritos sem perda de conteúdo, rejeição de IA simulada em modo pessoal, vencimento exato de revisões, recomposição de métricas semanais e configuração pública opcional de autenticação. As novas regras de busca verificam isolamento por espaço, categorias, acentos e texto vazio; os dias de atividade exigem registros reais, sem preencher a semana a partir de um contador.
 
-1. Navegação real pelas cinco abas e conclusão de uma questão correta com resultado 1/1.
-2. Resposta errada → alternativa correta e explicações → criação de flashcard → caderno com novo erro → domínio 42% → 38% → recarga preserva 38% → revisão de flashcard.
-3. Criação de anotação → tela do material → conversa contextual → resposta simulada → troca de modo → aula guiada com resposta errada e recuperação didática → conclusão.
-4. Validação de orçamento inválido → plano de véspera de 30 minutos → início do primeiro assunto.
-5. Visita às principais rotas, captura de erros de console e screenshots mobile/desktop.
+Os nove cenários Playwright cobrem navegação e prática existentes, onboarding e edição do perfil, persistência e troca de espaço, pasta → anotação → favorito → movimentação → busca → renomeação → recarga, prova → home → plano → estudo, estados vazios e autenticação não configurada. Os testes visitam rotas reais, interagem com controles e verificam os dados depois de recarregar.
 
-## Inspeção visual
+Outros seis cenários cobrem avanço/retorno da introdução; busca abrindo assunto, questão e flashcard específicos; ausência de resultados e limpeza; login social sem sessão falsa; Escape com restauração de foco; fechamento do painel por arrasto e fundo; preferências após recarga; redução de movimento sem escala ao pressionar; Plus sem checkout habilitado; novas telas sem erros ou overflow. Os filtros da biblioteca agora são exercitados dentro do painel inferior.
 
-- [Início em viewport mobile](screenshots/home-mobile.png)
-- [Início em viewport desktop](screenshots/home-desktop.png)
+A verificação de responsividade cobre 360, 390, 768 e 1440 px; os testes de rotas capturam erros de página/console e overflow horizontal. A home foi inspecionada visualmente em capturas de celular e desktop. As capturas registram a área visível do ScrollView, não todo seu conteúdo interno:
 
-As capturas mostram a área visível; o conteúdo abaixo permanece acessível pelo scroll nativo. Cores, hierarquia, quebra de texto e barra inferior foram inspecionadas. Ícones decorativos foram retirados da semântica principal e botões/abas receberam nomes acessíveis. Campos, seleção de alternativas, alternância de preferências e progresso têm propriedades de acessibilidade.
+Os quatro testes adicionais do estúdio cobrem preservação do texto e da nota de origem, persistência, edição/exclusão, busca isolada por espaço, limites de entrada, rejeição de formatos incompatíveis, cartões e questões ligados à prática e proteção contra snapshots malformados. Três cenários adicionais de interface verificam transcrição → mapa → slides, zoom, edição e exclusão com confirmação, questões/cartões manuais persistidos e o novo layout com barra lateral, cápsulas e menu central. O retorno do editor usa a tela de documento existente, sem empilhar cópias.
 
-## Observações do ambiente
+- [Demonstração mobile](screenshots/home-mobile.png)
+- [Demonstração desktop](screenshots/home-desktop.png)
+- [Pessoal mobile](screenshots/personal-360.png)
+- [Pessoal tablet](screenshots/personal-768.png)
+- [Pessoal desktop](screenshots/personal-1440.png)
+- [Onboarding no celular](screenshots/refinement-onboarding-360.png)
+- [Conta e acesso no celular](screenshots/refinement-account-360.png)
+- [Busca no celular](screenshots/refinement-search-360.png)
+- [Prévia do Plus no celular](screenshots/refinement-membership-360.png)
+- [Painel de lembretes](screenshots/refinement-reminders.png)
+- [Nova home pastel no desktop](screenshots/pastel-home-desktop.png)
+- [Nova home pastel no celular](screenshots/pastel-home-360.png)
+- [Menu de criação central](screenshots/pastel-create-desktop.png)
+- [Mapa mental no celular](screenshots/pastel-mindmap-mobile.png)
+- [Mapa mental no desktop](screenshots/pastel-mindmap-desktop.png)
+- [Chat com campo fixo no desktop](screenshots/pastel-chat-desktop.png)
 
-Node e Git não estavam no PATH inicial. Foram instaladas distribuições portáteis em `%LOCALAPPDATA%\CortexaTools`, e o PATH do usuário foi atualizado. O auxiliar `scripts/start.ps1` permite executar em terminais que ainda herdaram o PATH antigo.
+As capturas estáticas usam redução de movimento para não registrar quadros intermediários. Os testes de interação exercitam animações normais e a preferência de acessibilidade separadamente.
 
-Uma execução do Expo Doctor não encontrou Git no PATH da sessão e reportou `.expo` como não ignorado. A pasta já estava no `.gitignore`; com Git disponível, `git check-ignore .expo` confirmou a regra e o Doctor passou nas 18 verificações.
+## Correções encontradas durante a validação
 
-O terminal de testes pode emitir um aviso do Node sobre `NO_COLOR` e `FORCE_COLOR` definidos pelo ambiente. É um conflito de configuração de cores do terminal, sem erro de aplicação ou console do navegador.
+- O Metro que estava aberto durante a instalação reteve a resolução antiga de dependências. Reiniciado com cache limpo, passou a resolver os novos pacotes.
+- O retorno do onboarding criava outra instância das abas. `dismissTo` agora retorna à tela existente.
+- A seleção de pastas precisava de semântica de botão alternável no navegador. `Choice` mantém seleção nativa e informa `aria-pressed` na web.
+- A barra lateral usava largura mínima e fundo ativo padrão do navegador de abas. Foram alinhados à largura e cores do produto.
+- A inspeção visual encontrou perda de fundo e espaçamento em botões animados no navegador: a função de estilo do Pressable estava sendo envolvida diretamente por Animated. O componente agora passa uma lista de estilos estática com valores animados e estado de pressão explícito.
+- O teste de arrasto iniciava antes de o painel terminar de entrar. Ele agora aguarda a estabilidade do cabeçalho, como o usuário faria antes de segurá-lo. O gesto fecha o painel sem disputar a rolagem do conteúdo.
+- A busca abria a primeira questão/card do assunto. Agora leva ao item selecionado; consultar um card ainda não vencido não o reagenda até uma avaliação explícita.
 
-## Auditoria de dependências
+## Limites da evidência
 
-`npm audit` sinalizou **39 ocorrências: 16 moderadas e 23 altas**, contabilizando também pacotes que dependem de bibliotecas afetadas. `npm audit fix` foi executado; nenhuma atualização de major foi forçada.
+Exportar bundles valida compilação e resolução de módulos; não comprova interação no Expo Go físico. O teste de contas usa repositórios locais com proprietários diferentes: não substitui testes de autenticação ou autorização no servidor. O fluxo real de confirmação de e-mail, login, refresh, expiração e logout precisa ser validado quando houver projeto configurado, seguindo `architecture.md`.
 
-Os pacotes de origem dos avisos incluem `braces`, `decode-uri-component`, `image-size`, `node-forge`, `postcss`, `sprintf-js` e `uuid`, trazidos pela árvore Expo/Metro/React Native. Parte das recomendações automáticas implica mudança incompatível de SDK; alguns pacotes também não tinham versão corrigida disponível na linha consultada. O app não implementa upload nem processa arquivos remotos nesta etapa, mas isso não equivale a uma auditoria de segurança completa.
+Transições e gestos nativos de retorno, blur e feedback háptico ainda precisam de inspeção em iPhone/Android físicos. O Mobile Preview executa a versão web: mostra entrada suave, resposta ao toque e painéis animados, mas não reproduz o Taptic Engine nem toda a transição interativa do iOS. `expo-haptics` e `expo-blur` foram instalados nas versões compatíveis com SDK 54, com checagem de dependências e Expo Doctor antes e depois da instalação.
 
-Antes de distribuir ou integrar dados reais: reavaliar a versão do Expo, aplicar atualizações compatíveis, repetir a auditoria e executar validação em dispositivos. Este registro não declara que as vulnerabilidades foram corrigidas.
+Não há IA, RAG, uploads ou transcrição reais. As interfaces pessoais não afirmam que esses serviços estão conectados. Não foram criados usuários, tabelas, buckets ou políticas em ambiente remoto.
+
+A instalação manteve os 39 avisos de auditoria já existentes na árvore Expo/Metro (16 moderados, 23 altos). Nenhum `npm audit fix --force` foi aplicado. Este registro não declara essas vulnerabilidades resolvidas. A evolução do SDK e a auditoria precisam ser reavaliadas antes de distribuição.
+
+O ambiente de terminal pode emitir aviso sobre `NO_COLOR`/`FORCE_COLOR`; não é um erro do console do app.

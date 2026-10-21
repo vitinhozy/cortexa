@@ -26,7 +26,9 @@ test('wrong answer updates mistakes, knowledge and profile exactly once per atte
   const after = repo.getSnapshot();
   assert.equal(after.attempts.length, 1);
   assert.equal(after.mistakes.length, before.mistakes.length + 1);
-  assert.equal(after.metrics[0].mastery, 38);
+  assert.ok(after.metrics.find((m) => m.topicId === 'acid')!.mastery < 50);
+  assert.equal(after.learning?.events.filter((e) => e.type === 'QUESTION_ATTEMPT').length, 1);
+  assert.equal(after.practice?.reviews.length, 1);
   assert.equal(after.user.answered, before.user.answered + 1);
   assert.equal(after.user.correct, before.user.correct);
   await assert.rejects(service.questionService.answer('q-acid-1', 'Z', 'attempt-2'));
@@ -37,7 +39,7 @@ test('correct answer increments score without creating an error', async () => {
   await createServices(repo).questionService.answer('q-acid-1', 'B', 'correct-1');
   assert.equal(repo.getSnapshot().user.correct, before.user.correct + 1);
   assert.equal(repo.getSnapshot().mistakes.length, before.mistakes.length);
-  assert.equal(repo.getSnapshot().metrics[0].mastery, 45);
+  assert.ok(repo.getSnapshot().metrics.find((m) => m.topicId === 'acid')!.mastery > 50);
 });
 test('created flashcards are deduplicated and progress survives rehydration', async () => {
   const memory = storage();

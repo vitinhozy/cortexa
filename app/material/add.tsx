@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { View } from 'react-native';
-import { router } from 'expo-router';
 import {
   Screen,
   Card,
@@ -15,6 +14,10 @@ import {
 } from '@/components/ui';
 import { useStudy } from '@/hooks/useStudy';
 import { colors } from '@/constants/theme';
+import { FOLDER_PALETTE } from '@/constants/folderPalette';
+import { useAppNavigation } from '@/hooks/useAppNavigation';
+import { Choice, Choices } from '@/components/Choice';
+import { FolderChoice } from '@/components/FolderChoice';
 const sources: { name: string; icon: IconName }[] = [
   { name: 'PDF', icon: 'file-text' },
   { name: 'Imagem', icon: 'image' },
@@ -23,7 +26,13 @@ const sources: { name: string; icon: IconName }[] = [
   { name: 'Anotações', icon: 'edit-3' },
 ];
 export default function AddMaterialScreen() {
-  const { services } = useStudy();
+  const { replace } = useAppNavigation();
+  const { data, services, repository } = useStudy();
+  const [subjectId, setSubjectId] = useState(
+    data.user.subjectIds?.[0] ?? data.subjects[0]?.id ?? '',
+  );
+  const [topicName, setTopicName] = useState('');
+  const [folderId, setFolderId] = useState<string>();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [busy, setBusy] = useState(false);
@@ -32,10 +41,21 @@ export default function AddMaterialScreen() {
     if (busy) return;
     setBusy(true);
     try {
-      const material = await services.materialService.addNote(title, content);
-      router.replace({ pathname: '/material/[id]', params: { id: material.id } });
-    } catch {
-      setError('Preencha os campos para salvar sua anotação.');
+      const material = await services.materialService.addNote(title, content, {
+        subjectId,
+        topicName,
+        folderId,
+      });
+      await repository.flush();
+      if (repository.storageError) {
+        setError(
+          'Anotação adicionada nesta sessão, mas houve uma falha ao gravar no dispositivo. Abra a biblioteca antes de fechar o app.',
+        );
+        return;
+      }
+      replace({ pathname: '/material/[id]', params: { id: material.id } });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Não foi possível salvar sua anotação.');
     } finally {
       setBusy(false);
     }
@@ -47,7 +67,7 @@ export default function AddMaterialScreen() {
       back
       eyebrow="NOVO MATERIAL"
     >
-      <Notice text="Uploads de PDF, imagem, áudio e links estarão disponíveis com as integrações futuras. Nesta versão, você pode salvar anotações locais de demonstração." />
+      <Notice text="Você já pode salvar anotações neste dispositivo. Upload e leitura de PDF, slides, imagens e áudio ainda não estão disponíveis. Nenhum arquivo será apresentado como processado." />
       <View style={s.grid}>
         {sources.map((source) => (
           <Card
@@ -72,7 +92,41 @@ export default function AddMaterialScreen() {
       </View>
       <Card>
         <T style={s.sectionTitle}>Nova anotação</T>
-        <Badge label="FISIOLOGIA · EQUILÍBRIO ÁCIDO-BASE" />
+        <T>Disciplina</T>
+        <Choices>
+          {data.subjects.map((subject) => (
+            <Choice
+              key={subject.id}
+              label={subject.name}
+              selected={subjectId === subject.id}
+              onPress={() => setSubjectId(subject.id)}
+            />
+          ))}
+        </Choices>
+        <Field
+          label="Assunto (opcional)"
+          placeholder="Se vazio, usaremos o título"
+          value={topicName}
+          onChangeText={setTopicName}
+          maxLength={100}
+        />
+        <T>Pasta</T>
+        <Choices>
+          <FolderChoice
+            name="Biblioteca geral"
+            selected={!folderId}
+            onPress={() => setFolderId(undefined)}
+          />
+          {data.folders?.map((folder) => (
+            <FolderChoice
+              key={folder.id}
+              name={folder.name}
+              color={folder.color ?? FOLDER_PALETTE[0].color}
+              selected={folderId === folder.id}
+              onPress={() => setFolderId(folder.id)}
+            />
+          ))}
+        </Choices>
         <Field
           label="Título"
           placeholder="Ex.: Pontos importantes da aula"
@@ -83,7 +137,7 @@ export default function AddMaterialScreen() {
         <Field
           label="Anotação"
           multiline
-          placeholder="Adicione apenas conteúdo fictício para testar..."
+          placeholder="Escreva suas anotações de estudo. Não inclua dados de pacientes."
           value={content}
           onChangeText={setContent}
           maxLength={10000}

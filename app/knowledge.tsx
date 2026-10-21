@@ -1,69 +1,65 @@
-import { useState } from 'react';
-import { Pressable, View } from 'react-native';
-import { Screen, Card, T, Badge, Progress, Empty, s } from '@/components/ui';
+import { useMemo, useState } from 'react';
+import { View } from 'react-native';
+import { Screen, T, Empty, Card, Progress, Button, s } from '@/components/ui';
+import { router } from 'expo-router';
+import { Choice } from '@/components/Choice';
 import { TopicRow } from '@/components/TopicRow';
+import { AccuracyChart } from '@/components/AccuracyChart';
 import { useStudy } from '@/hooks/useStudy';
-import { colors, fonts } from '@/constants/theme';
+import { subjectPerformance } from '@/features/study/insights';
+import { colors } from '@/constants/theme';
+import { learnerModel } from '@/features/study/learner';
+
 export default function KnowledgeScreen() {
-  const { data } = useStudy();
-  const [subject, setSubject] = useState('physiology');
-  const topics = data.topics.filter((t) => t.subjectId === subject);
-  const average = topics.length
-    ? Math.round(
-        topics.reduce(
-          (sum, topic) => sum + (data.metrics.find((m) => m.topicId === topic.id)?.mastery ?? 0),
-          0,
-        ) / topics.length,
-      )
-    : 0;
+  const { data, mode } = useStudy();
+  const [selectedSubject, setSubject] = useState(
+    data.user.subjectIds?.[0] ?? data.subjects[0]?.id ?? '',
+  );
+  const subject = data.subjects.find((item) => item.id === selectedSubject) ?? data.subjects[0];
+  const performance = useMemo(
+    () => subjectPerformance(data, subject?.id ?? ''),
+    [data, subject?.id],
+  );
+  const orderedTopics = [...performance.topics].sort(
+    (a, b) =>
+      Number(b.metric.answered > 0) - Number(a.metric.answered > 0) ||
+      a.metric.mastery - b.metric.mastery,
+  );
+  const concepts = useMemo(
+    () =>
+      learnerModel(data).concepts.filter((c) =>
+        data.topics.some((t) => t.id === c.topicId && t.subjectId === subject?.id),
+      ),
+    [data, subject?.id],
+  );
   return (
     <Screen
       title="Mapa de conhecimento"
-      subtitle="Enxergue suas conquistas. Encontre seu próximo avanço."
+      subtitle="Veja seus acertos e encontre os conceitos que precisam de revisão."
       eyebrow="SEU APRENDIZADO, EM PERSPECTIVA"
       back
     >
       <View style={[s.row, { flexWrap: 'wrap', gap: 8 }]}>
         {data.subjects.map((item) => (
-          <Pressable
+          <Choice
             key={item.id}
-            accessibilityRole="button"
-            accessibilityState={{ selected: item.id === subject }}
+            label={item.name}
+            selected={item.id === subject?.id}
             onPress={() => setSubject(item.id)}
-            style={{
-              backgroundColor: item.id === subject ? colors.primary : 'white',
-              padding: 12,
-              borderRadius: 10,
-            }}
-          >
-            <T style={{ color: item.id === subject ? 'white' : colors.muted, fontSize: 12 }}>
-              {item.name}
-            </T>
-          </Pressable>
+          />
         ))}
       </View>
-      {topics.length ? (
+      <AccuracyChart
+        performance={performance}
+        subject={subject?.name ?? 'Disciplina'}
+        simulated={mode === 'demo'}
+      />
+      {orderedTopics.length ? (
         <>
-          <Card style={{ backgroundColor: colors.mint }}>
-            <Badge label="FISIOLOGIA RENAL" />
-            <View style={[s.row, { justifyContent: 'space-between' }]}>
-              <T style={s.sectionTitle}>Uma base cada vez mais sólida.</T>
-              <T
-                style={{
-                  fontSize: 27,
-                  lineHeight: 34,
-                  fontFamily: fonts.semibold,
-                  color: colors.primary,
-                }}
-              >
-                {average}%
-              </T>
-            </View>
-            <Progress value={average} />
-            <T muted style={{ fontSize: 12 }}>
-              Domínio estimado a partir dos dados demonstrativos e das suas atividades.
-            </T>
-          </Card>
+          <T style={s.sectionTitle}>Domínio por assunto</T>
+          <T muted style={{ fontSize: 12, lineHeight: 20 }}>
+            Comece pelos conceitos com menor domínio estimado. Toque em um deles para revisar.
+          </T>
           <View style={[s.row, { flexWrap: 'wrap', gap: 12 }]}>
             {[
               { label: '0–49 · Revisar', color: colors.red },
@@ -82,12 +78,8 @@ export default function KnowledgeScreen() {
             ))}
           </View>
           <View style={{ gap: 12 }}>
-            {topics.map((topic) => (
-              <TopicRow
-                key={topic.id}
-                topic={topic}
-                metric={data.metrics.find((m) => m.topicId === topic.id)!}
-              />
+            {orderedTopics.map((item) => (
+              <TopicRow key={item.topic.id} topic={item.topic} metric={item.metric} />
             ))}
           </View>
         </>
@@ -95,9 +87,34 @@ export default function KnowledgeScreen() {
         <Empty
           icon="compass"
           title="Um novo território para explorar"
-          message="Os primeiros conteúdos desta disciplina chegarão em uma próxima versão. Explore Fisiologia para testar o mapa."
+          message="Adicione anotações nesta disciplina e pratique questões para acompanhar seus resultados aqui."
         />
       )}
+      {concepts.length ? (
+        <>
+          <T style={s.sectionTitle}>Domínio por conceito</T>
+          <T muted>Estimativa por evidência. A taxa de acertos acima é uma medida diferente.</T>
+          {concepts.map((concept) => (
+            <Card key={concept.id}>
+              <T style={s.sectionTitle}>{concept.name}</T>
+              <T>
+                {concept.mastery.exposures
+                  ? `${concept.mastery.value}% estimado · ${concept.mastery.exposures} exposições avaliadas`
+                  : 'Ainda sem evidência de desempenho'}
+              </T>
+              {concept.mastery.exposures ? <Progress value={concept.mastery.value} /> : null}
+              {!concept.mastery.sufficientEvidence && concept.mastery.exposures ? (
+                <T muted>Evidência inicial; autoavaliações não substituem respostas objetivas.</T>
+              ) : null}
+            </Card>
+          ))}
+          <Button
+            title="Ver minha memória de aprendizagem"
+            variant="secondary"
+            onPress={() => router.push('/learning')}
+          />
+        </>
+      ) : null}
     </Screen>
   );
 }

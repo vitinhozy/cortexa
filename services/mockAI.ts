@@ -1,6 +1,8 @@
 import type { AIService, AIRouter, Repository } from './contracts';
 import type { AIConversation, AIMessage } from '@/types/domain';
 import { uid } from '@/utils/date';
+import { learnerContext } from '@/features/study/learner';
+import { appendStudyEvent, eventContext } from '@/features/study/events';
 export const aiRouter: AIRouter = {
   route: (task) => ({
     capability:
@@ -15,6 +17,8 @@ export class MockAIService implements AIService {
   }
   async send(input: Parameters<AIService['send']>[0]): Promise<AIMessage> {
     const data = this.repo.getSnapshot();
+    if (data.workspace === 'personal')
+      throw new Error('Respostas simuladas estão disponíveis apenas na demonstração.');
     const material = data.materials.find((m) => m.id === input.materialId);
     const normalized = input.text.toLowerCase();
     const topic =
@@ -48,6 +52,12 @@ export class MockAIService implements AIService {
       ].some((term) => normalized.includes(term))
     )
       content = `Estou em modo de demonstração e ainda não interpreto perguntas livres com uma IA real. Posso mostrar uma explicação pronta de ${topic.name.toLowerCase()}, questões comentadas ou uma aula guiada.\n\n${topic.summary}`;
+    const context = learnerContext(data, input.text, topic.id);
+    if (context.concepts.some((c) => c.highConfidenceErrors > 0))
+      content +=
+        '\n\nNo seu histórico local, este conceito apareceu em um erro com alta confiança. Compare o mecanismo antes de tentar uma nova questão.';
+    if (context.academicStage !== 'UNKNOWN')
+      content += `\n\nFoco da sua etapa: ${context.learningObjective}`;
     const userMessage: AIMessage = {
       id: uid('msg'),
       role: 'user',
@@ -77,6 +87,7 @@ export class MockAIService implements AIService {
       role: 'assistant',
       content,
       createdAt: new Date().toISOString(),
+      simulated: true,
       sources: [
         {
           id: material?.id ?? 'demo-reference',
@@ -92,12 +103,27 @@ export class MockAIService implements AIService {
         },
       ],
     };
-    this.repo.update((current) => ({
-      ...current,
-      conversations: current.conversations.map((c) =>
-        c.id === input.conversationId ? { ...c, messages: [...c.messages, answer] } : c,
+    this.repo.update((current) =>
+      appendStudyEvent(
+        {
+          ...current,
+          conversations: current.conversations.map((c) =>
+            c.id === input.conversationId ? { ...c, messages: [...c.messages, answer] } : c,
+          ),
+        },
+        {
+          ...eventContext(
+            data,
+            `chat:${answer.id}`,
+            answer.createdAt,
+            context.concepts.map((c) => c.id),
+            context.concepts.flatMap((c) => c.sourceIds),
+          ),
+          type: 'CHAT_CONCEPT_DISCUSSION',
+          conversationId: input.conversationId,
+        },
       ),
-    }));
+    );
     return answer;
   }
 }

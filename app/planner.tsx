@@ -6,16 +6,43 @@ import { useStudy } from '@/hooks/useStudy';
 import { addDays, daysUntil, formatDate, localDate } from '@/utils/date';
 import { colors, fonts } from '@/constants/theme';
 import type { StudyPlan } from '@/types/domain';
+import { BottomSheet } from '@/components/BottomSheet';
+import { useAppNavigation } from '@/hooks/useAppNavigation';
 export default function PlannerScreen() {
-  const { urgent, topicId } = useLocalSearchParams<{ urgent?: string; topicId?: string }>();
+  const { goBack } = useAppNavigation();
+  const { urgent, topicId, examId } = useLocalSearchParams<{
+    urgent?: string;
+    topicId?: string;
+    examId?: string;
+  }>();
   const { data, services } = useStudy();
   const isUrgent = urgent === 'true';
-  const [date, setDate] = useState(isUrgent ? addDays(localDate(), 1) : data.exams[0].date);
-  const [minutes, setMinutes] = useState('60');
-  const [selected, setSelected] = useState(topicId ? [topicId] : data.topics.map((t) => t.id));
+  const exam = data.exams.find((item) => item.id === examId);
+  const [date, setDate] = useState(
+    isUrgent
+      ? addDays(localDate(), 1)
+      : (exam?.date ??
+          data.exams.find((item) => item.date >= localDate())?.date ??
+          addDays(localDate(), 7)),
+  );
+  const [minutes, setMinutes] = useState(String(data.user.dailyMinutes ?? 60));
+  const [selected, setSelected] = useState(
+    topicId
+      ? [topicId]
+      : exam
+        ? exam.topicIds.length
+          ? exam.topicIds
+          : data.topics.filter((t) => t.subjectId === exam.subjectId).map((t) => t.id)
+        : data.topics.map((t) => t.id),
+  );
   const [plan, setPlan] = useState<StudyPlan>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  function openSession(selectedTopicId: string) {
+    const route = { pathname: '/session', params: { topicId: selectedTopicId } } as const;
+    if (isUrgent) router.replace(route);
+    else router.push(route);
+  }
   async function generate() {
     const budget = Number(minutes);
     const dayCount = daysUntil(date);
@@ -43,24 +70,20 @@ export default function PlannerScreen() {
       setBusy(false);
     }
   }
-  return (
-    <Screen
-      title={isUrgent ? 'Sua prova é amanhã.' : 'Um plano que cabe no seu dia.'}
-      subtitle={
-        isUrgent
-          ? 'Vamos fazer o melhor com o tempo que você tem.'
-          : 'Defina o destino. A gente ajuda a organizar os próximos passos.'
-      }
-      eyebrow="PLANEJADOR DE ESTUDOS"
-      back
-    >
+  const content = (
+    <>
+      {isUrgent ? (
+        <T muted style={{ lineHeight: 22 }}>
+          Vamos fazer o melhor com o tempo que você tem. Organize sua revisão com prioridade e
+          avance no que precisa.
+        </T>
+      ) : null}
       {!plan ? (
         <>
           <Card>
-            <T style={s.sectionTitle}>Disciplina</T>
-            <Badge label="FISIOLOGIA RENAL" />
+            <T style={s.sectionTitle}>{exam?.title ?? 'Sua revisão'}</T>
             <T muted style={{ fontSize: 12 }}>
-              Disciplina disponível nesta demonstração.
+              Selecione os assuntos que quer revisar. O plano usa regras locais, sem IA.
             </T>
             {!isUrgent ? (
               <Field
@@ -112,6 +135,9 @@ export default function PlannerScreen() {
           </Card>
           <Card>
             <T style={s.sectionTitle}>Assuntos da prova</T>
+            {!data.topics.length ? (
+              <Notice text="Adicione uma anotação na biblioteca para criar seus primeiros assuntos de estudo." />
+            ) : null}
             {data.topics.map((topic) => (
               <Pressable
                 key={topic.id}
@@ -137,13 +163,6 @@ export default function PlannerScreen() {
             disabled={busy}
             onPress={generate}
           />
-          {data.plans.length ? (
-            <Button
-              title="Abrir último plano salvo"
-              variant="ghost"
-              onPress={() => setPlan(data.plans[data.plans.length - 1])}
-            />
-          ) : null}
         </>
       ) : (
         <>
@@ -178,9 +197,7 @@ export default function PlannerScreen() {
                       title="Estudar este bloco"
                       small
                       variant="ghost"
-                      onPress={() =>
-                        router.push({ pathname: '/session', params: { topicId: block.topicId } })
-                      }
+                      onPress={() => openSession(block.topicId)}
                     />
                   </Card>
                 ))}
@@ -189,14 +206,29 @@ export default function PlannerScreen() {
           <Button
             title="Começar plano"
             icon="arrow-right"
-            onPress={() =>
-              router.push({ pathname: '/session', params: { topicId: plan.blocks[0].topicId } })
-            }
+            onPress={() => plan.blocks[0] && openSession(plan.blocks[0].topicId)}
           />
           <Button title="Ajustar plano" variant="ghost" onPress={() => setPlan(undefined)} />
         </>
       )}
       {error ? <Notice text={error} /> : null}
+    </>
+  );
+  if (isUrgent) {
+    return (
+      <BottomSheet visible title="Sua prova é amanhã." onClose={() => goBack('/study')}>
+        {content}
+      </BottomSheet>
+    );
+  }
+  return (
+    <Screen
+      title="Um plano que cabe no seu dia."
+      subtitle="Defina o destino. A gente ajuda a organizar os próximos passos."
+      eyebrow="PLANEJADOR DE ESTUDOS"
+      back
+    >
+      {content}
     </Screen>
   );
 }

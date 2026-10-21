@@ -1,3 +1,10 @@
+import type { StudioDocument } from './studio';
+import type { SavedMaterialAnalysis } from './materialAnalysis';
+import type { AcademicJourney, AcademicJourneyInput, AcademicStage } from './academic';
+import type { LearningState } from './learning';
+import type { AssessmentState, AssessmentContext } from './assessment';
+import type { Confidence, PracticeCitation, PracticeState, QuestionFormat } from './practice';
+
 export interface User {
   id: string;
   name: string;
@@ -13,6 +20,9 @@ export interface User {
   weeklyMinutes: number;
   weeklyGoal: number;
   lastStudyDate?: string;
+  dailyMinutes?: number;
+  subjectIds?: string[];
+  onboardingComplete?: boolean;
 }
 export interface Subject {
   id: string;
@@ -20,6 +30,8 @@ export interface Subject {
   color: string;
 }
 export interface Topic {
+  parentTopicId?: string;
+  kind?: 'theme' | 'topic' | 'subtopic';
   id: string;
   subjectId: string;
   name: string;
@@ -28,6 +40,7 @@ export interface Topic {
   keyPoints: string[];
 }
 export interface StudyMaterial {
+  analysis?: SavedMaterialAnalysis;
   id: string;
   title: string;
   subjectId: string;
@@ -37,6 +50,26 @@ export interface StudyMaterial {
   pages: number;
   status: 'ready' | 'processing';
   content?: string;
+  folderId?: string;
+  favorite?: boolean;
+  lastOpenedAt?: string;
+}
+export interface MaterialFolder {
+  id: string;
+  name: string;
+  /** Optional for folders created by older local app versions. */
+  color?: string;
+}
+export type WorkspaceMode = 'demo' | 'personal';
+export interface AcademicProfile {
+  name: string;
+  course: string;
+  semester: number;
+  university: string;
+  goal: string;
+  dailyMinutes: number;
+  subjectIds: string[];
+  journey?: AcademicJourneyInput;
 }
 export interface QuestionOption {
   id: string;
@@ -44,6 +77,17 @@ export interface QuestionOption {
   explanation: string;
 }
 export interface Question {
+  revision?: number;
+  caseGroupId?: string;
+  caseStep?: number;
+  conceptId?: string;
+  conceptName?: string;
+  level?: 1 | 2 | 3 | 4 | 5;
+  format?: QuestionFormat;
+  sourceIds?: string[];
+  citations?: PracticeCitation[];
+  prerequisiteConceptId?: string;
+  authored?: boolean;
   id: string;
   topicId: string;
   prompt: string;
@@ -55,6 +99,17 @@ export interface Question {
   probableCause: string;
 }
 export interface QuestionAttempt {
+  snapshotOrigin?: 'recorded' | 'legacy-current-bank';
+  assessmentContext?: AssessmentContext;
+  academicStage?: AcademicStage;
+  responseTimeSeconds?: number;
+  questionSnapshot?: Question;
+  practiceSessionId?: string;
+  conceptId?: string;
+  topicId?: string;
+  confidence?: Confidence;
+  difficulty?: Question['difficulty'];
+  level?: number;
   id: string;
   questionId: string;
   selectedOptionId: string;
@@ -62,6 +117,8 @@ export interface QuestionAttempt {
   createdAt: string;
 }
 export interface Flashcard {
+  conceptId?: string;
+  sourceIds?: string[];
   id: string;
   topicId: string;
   front: string;
@@ -72,6 +129,8 @@ export interface Flashcard {
 }
 export type ReviewRating = 'again' | 'hard' | 'good' | 'easy';
 export interface FlashcardReview {
+  conceptId?: string;
+  academicStage?: AcademicStage;
   id: string;
   flashcardId: string;
   rating: ReviewRating;
@@ -79,6 +138,8 @@ export interface FlashcardReview {
   nextDueAt: string;
 }
 export interface StudySession {
+  academicStage?: AcademicStage;
+  sourceIds?: string[];
   id: string;
   topicId: string;
   startedAt: string;
@@ -125,6 +186,10 @@ export interface AIMessage {
   content: string;
   createdAt: string;
   sources?: SourceCitation[];
+  provider?: string;
+  model?: string;
+  promptVersion?: string;
+  simulated?: boolean;
 }
 export interface AIConversation {
   id: string;
@@ -134,6 +199,13 @@ export interface AIConversation {
   messages: AIMessage[];
 }
 export interface Mistake {
+  masteryBefore?: number;
+  masteryAfter?: number;
+  academicStage?: AcademicStage;
+  conceptId?: string;
+  conceptName?: string;
+  confidence?: Confidence;
+  exposures?: number;
   id: string;
   attemptId: string;
   questionId: string;
@@ -146,9 +218,19 @@ export interface Mistake {
 export interface Preferences {
   notifications: boolean;
   dailyReminder: boolean;
+  reduceMotion?: boolean;
+  haptics?: boolean;
+  reminderTime?: string;
 }
 export interface AppData {
+  assessments?: AssessmentState;
+  academicJourney?: AcademicJourney;
+  learning?: LearningState;
+  practice?: PracticeState;
+  studio?: StudioDocument[];
   version: 1;
+  workspace?: WorkspaceMode;
+  folders?: MaterialFolder[];
   user: User;
   topics: Topic[];
   subjects: Subject[];

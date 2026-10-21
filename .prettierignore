@@ -1,5 +1,11 @@
-node_modules
-dist
-.expo
+node_modules/
+.expo/
+dist/
+web-build/
+test-results/
+playwright-report/
+graphify-out/
+.agents/
+supabase/.temp/
 package-lock.json
 expo-env.d.ts

@@ -1,6 +1,7 @@
 import type { AppData, Flashcard, StudyMaterial } from '@/types/domain';
 import { topics, subjects } from './topics';
 import { questions } from './questions';
+import { annotateDemoQuestion, practiceDemoQuestions } from './practice';
 import { addDays, localDate } from '@/utils/date';
 export function createSeed(): AppData {
   const today = localDate();
@@ -86,7 +87,7 @@ export function createSeed(): AppData {
     topics,
     subjects,
     materials,
-    questions,
+    questions: [...questions.map(annotateDemoQuestion), ...practiceDemoQuestions],
     attempts: [],
     flashcards,
     reviews: [],

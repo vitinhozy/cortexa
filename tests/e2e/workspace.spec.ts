@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { test, expect, personalStorageKey } from './fixtures';
 import { ensurePersonalWorkspace } from './workspace-helpers';
 
 async function openPersonal(page: Page) {
@@ -10,10 +11,15 @@ async function openPersonal(page: Page) {
   ).toBeVisible();
 }
 
-test('a fresh visit guides the learner through onboarding to the personal dashboard', async ({
+test('a validated first account can complete introductions and use the personal dashboard', async ({
   page,
 }) => {
-  await page.goto('/');
+  await page.goto('/account');
+  await page.evaluate(() => {
+    localStorage.removeItem('cortexa:introduction:v1:welcome');
+    localStorage.removeItem('cortexa:introduction:v1:chat');
+  });
+  await page.goto('/onboarding');
   await expect(page).toHaveURL(/\/onboarding$/);
   await expect(page.getByRole('heading', { name: /Menos dispersão/ })).toBeVisible();
   await page.getByRole('button', { name: 'Pular introdução', exact: true }).click();
@@ -38,27 +44,26 @@ test('a fresh visit guides the learner through onboarding to the personal dashbo
     .getByRole('textbox', { name: 'Sua pergunta', exact: true })
     .fill('Explique um conceito');
   await page.getByRole('button', { name: 'Enviar pergunta', exact: true }).click();
-  await expect(page.getByText('Entre na sua conta para enviar a pergunta ao tutor.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Entrar ou criar conta' })).toBeVisible();
+  await expect(page.getByText('O tutor ainda não está disponível neste ambiente.')).toBeVisible();
+  await expect(page.getByText('CORTEXA · DEMONSTRAÇÃO', { exact: true })).toHaveCount(0);
 });
 
-test('a saved demonstration can switch to the new-user experience and stay there', async ({
+test('a validated account uses personal data even with a saved demonstration preference', async ({
   page,
 }) => {
   await page.addInitScript(() => {
-    if (!localStorage.getItem('cortexa:workspace')) {
-      localStorage.setItem('cortexa:workspace', 'demo');
-    }
+    localStorage.setItem('cortexa:workspace', 'demo');
   });
-  await page.goto('/ai');
-  await page.getByRole('button', { name: /Testar como novo usu/ }).click();
-  await expect(page).toHaveURL(new RegExp('/overview$'));
+  await page.goto('/overview');
   await expect(page.getByText(/PESSOAL/)).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Configurar meu estudo', exact: true }),
   ).toBeVisible();
   await page.reload();
   await expect(page.getByText(/PESSOAL/)).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Explorar demonstração', exact: true }),
+  ).toHaveCount(0);
 });
 
 async function addNote(page: Page, title = 'Anatomia da aula') {
@@ -75,7 +80,7 @@ async function addNote(page: Page, title = 'Anatomia da aula') {
   await expect(page.getByText('Sua anotação', { exact: true })).toBeVisible();
 }
 
-test('personal onboarding persists without importing demo progress; workspaces remain separate', async ({
+test('personal onboarding persists in the validated identity without importing demo progress', async ({
   page,
 }) => {
   await openPersonal(page);
@@ -112,15 +117,14 @@ test('personal onboarding persists without importing demo progress; workspaces r
   await expect(page.getByText('Olá, Ana Silva.', { exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByText('Olá, Ana Silva.', { exact: true })).toBeVisible();
-  await page.goto('/profile');
-  await page.getByRole('button', { name: 'Explorar demonstração', exact: true }).click();
-  await expect(page).toHaveURL(/\/overview$/);
-  await page.getByRole('tab', { name: 'Visão geral', exact: true }).click();
-  await expect(
-    page.getByRole('heading', { name: /Boa (noite|tarde), Victor|Bom dia, Victor/ }),
-  ).toBeVisible();
-  await ensurePersonalWorkspace(page);
-  await page.getByRole('tab', { name: 'Visão geral', exact: true }).click();
+  expect(
+    await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(key) ?? '{}').user?.name,
+      personalStorageKey,
+    ),
+  ).toBe('Ana Silva');
+  expect(await page.evaluate(() => localStorage.getItem('cortexa:personal:local:v1'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('cortexa:demo:v1'))).toBeNull();
   await expect(page.getByText('Olá, Ana Silva.', { exact: true })).toBeVisible();
   await expect(page.getByTestId('weekly-goal-indicator')).toHaveAccessibleName(
     'Meta semanal: 0 de 225 minutos',
@@ -219,13 +223,16 @@ test('personal exam connects home, plan and study without fabricated AI or maste
     .getByRole('textbox', { name: 'Sua pergunta', exact: true })
     .fill('Explique o meu material');
   await page.getByRole('button', { name: 'Enviar pergunta', exact: true }).click();
-  await expect(page.getByText('Entre na sua conta para enviar a pergunta ao tutor.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Entrar ou criar conta' })).toBeVisible();
+  await expect(page.getByText('O tutor ainda não está disponível neste ambiente.')).toBeVisible();
+  const conversation = await page.evaluate(
+    (key) => JSON.parse(localStorage.getItem(key) ?? '{}').conversations?.at(-1),
+    personalStorageKey,
+  );
+  expect(conversation.messages).toHaveLength(1);
+  expect(conversation.messages[0].role).toBe('user');
 });
 
-test('empty personal routes and unconfigured auth render on phone, tablet and desktop', async ({
-  page,
-}) => {
+test('empty authenticated routes render on phone, tablet and desktop', async ({ page }) => {
   test.setTimeout(120000);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const errors: string[] = [];
@@ -252,20 +259,14 @@ test('empty personal routes and unconfigured auth render on phone, tablet and de
     await page.goto(route);
     if (route === '/ai')
       await expect(page.getByRole('textbox', { name: 'Sua pergunta', exact: true })).toBeVisible();
+    else if (route === '/account')
+      await expect(page.getByRole('button', { name: 'Sair da conta', exact: true })).toBeVisible();
     else await expect(page.getByText('PESSOAL · LOCAL', { exact: true })).toBeVisible();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
   }
-  await expect(page.getByRole('heading', { name: /Entre na Cortexa/ })).toBeVisible();
-  if (await page.getByRole('textbox', { name: 'E-mail', exact: true }).count()) {
-    await expect(page.getByRole('textbox', { name: 'Senha', exact: true })).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: 'Continuar sem conta', exact: true }),
-    ).toBeVisible();
-  } else {
-    await expect(page.getByText(/Autentica/)).toBeVisible();
-  }
+  await expect(page.getByRole('textbox', { name: 'E-mail', exact: true })).toHaveCount(0);
   await page.goto('/overview');
   for (const width of [360, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });

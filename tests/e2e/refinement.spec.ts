@@ -1,9 +1,10 @@
-import { test, expect } from '@playwright/test';
-import { demonstrationStorage } from './workspace-helpers';
+import { test, expect } from './fixtures';
 
-test.use({ storageState: demonstrationStorage });
+test.use({ workspace: 'seeded' });
 
 test('intro moves forward and back before opening the academic form', async ({ page }) => {
+  await page.goto('/account');
+  await page.evaluate(() => localStorage.removeItem('cortexa:introduction:v1:welcome'));
   await page.goto('/onboarding');
   await expect(page.getByText('Uma base que é sua', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Continuar', exact: true }).click();
@@ -131,9 +132,7 @@ test('direct tools return to their current parent fallback', async ({ context })
   }
 });
 
-test('sheets dismiss by Escape, restore focus and never simulate social sign-in', async ({
-  page,
-}) => {
+test('sheets dismiss by Escape, restore focus and keep the validated account', async ({ page }) => {
   await page.goto('/profile');
   const trigger = page.getByRole('button', { name: 'Lembretes e notificações', exact: true });
   await trigger.click();
@@ -144,8 +143,8 @@ test('sheets dismiss by Escape, restore focus and never simulate social sign-in'
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(trigger).toBeFocused();
   await page.goto('/account');
-  await expect(page.getByRole('textbox', { name: 'E-mail', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Continuar com Google' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sair da conta', exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'E-mail', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Continuar com Apple' })).toHaveCount(0);
   await expect(page.getByText(/Conectado como/)).toHaveCount(0);
 });
@@ -230,7 +229,11 @@ test('new surfaces fit narrow phones and tablets without runtime errors', async 
     await page.setViewportSize({ width, height: 900 });
     for (const route of ['/onboarding', '/search', '/membership', '/account']) {
       await page.goto(route);
-      await expect(page.getByText('DEMONSTRAÇÃO', { exact: true })).toBeVisible();
+      if (route === '/account')
+        await expect(
+          page.getByRole('button', { name: 'Sair da conta', exact: true }),
+        ).toBeVisible();
+      else await expect(page.getByText('PESSOAL · LOCAL', { exact: true })).toBeVisible();
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       ).toBe(true);

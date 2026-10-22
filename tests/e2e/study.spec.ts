@@ -1,7 +1,6 @@
-import { test, expect } from '@playwright/test';
-import { demonstrationStorage } from './workspace-helpers';
+import { test, expect } from './fixtures';
 
-test.use({ storageState: demonstrationStorage });
+test.use({ workspace: 'seeded' });
 test('tab navigation and completing a correct question session', async ({ page }) => {
   await page.goto('/overview');
   for (const tab of ['Estudar', 'Biblioteca', 'Conversar', 'Perfil', 'Visão geral']) {
@@ -26,8 +25,8 @@ test('wrong answer → mistake → flashcard → persisted knowledge', async ({ 
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/overview');
-  await expect(page.getByText(/Boa (noite|tarde), Victor|Bom dia, Victor/)).toBeVisible();
-  await page.getByRole('button', { name: 'Começar estudo', exact: true }).click();
+  await expect(page.getByText('Olá, Victor.', { exact: true })).toBeVisible();
+  await page.goto('/session?topicId=acid');
   await page.getByRole('button', { name: 'Praticar questões', exact: true }).click();
   await expect(page.getByText('Monte sua sessão.', { exact: true })).toBeVisible();
   await page.goto('/questions?topicId=acid&questionId=q-acid-1');
@@ -58,7 +57,9 @@ test('wrong answer → mistake → flashcard → persisted knowledge', async ({ 
   await expect(page.getByText('8 cards restantes')).toBeVisible();
   expect(errors).toEqual([]);
 });
-test('library notes, material chat and guided tutor', async ({ page }) => {
+test('personal notes open a study session; scripted tutoring remains unavailable', async ({
+  page,
+}) => {
   await page.goto('/library');
   await page.getByRole('button', { name: 'Adicionar material', exact: true }).click();
   await page.getByRole('textbox', { name: 'Título', exact: true }).fill('Revisão demonstrativa');
@@ -68,37 +69,27 @@ test('library notes, material chat and guided tutor', async ({ page }) => {
   await page.getByRole('button', { name: 'Salvar anotação', exact: true }).click();
   await expect(page.getByText('Sua anotação', { exact: true })).toBeVisible();
   const materialId = page.url().split('/').at(-1);
-  await page.getByRole('button', { name: 'Conversar com material', exact: true }).click();
-  await page
-    .getByRole('textbox', { name: 'Sua pergunta', exact: true })
-    .fill('Explique equilíbrio ácido-base');
-  await page.getByRole('button', { name: 'Enviar pergunta', exact: true }).click();
-  await expect(page.getByText('CORTEXA · DEMONSTRAÇÃO', { exact: true })).toBeVisible();
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          JSON.parse(localStorage.getItem('cortexa:demo:v1') ?? '{}').conversations?.at(-1)
-            ?.materialId,
-      ),
-    )
-    .toBe(materialId);
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.screenshot({ path: 'docs/screenshots/pastel-chat-mobile.png' });
-  await page.setViewportSize({ width: 1440, height: 1050 });
-  await page.screenshot({ path: 'docs/screenshots/pastel-chat-desktop.png' });
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Estudar anotação', exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/session\\?.*materialId=${materialId}$`));
+  await expect(
+    page.getByText('O bicarbonato diminui na acidose metabólica.', { exact: true }).last(),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      'Anotação escrita por você. Nenhum resumo ou conteúdo adicional foi gerado por IA.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Me ensine com perguntas', exact: true }),
+  ).toBeDisabled();
   await page.goto('/tutor');
-  await page.getByRole('button', { name: 'Ele aumenta', exact: true }).click();
-  await expect(page.getByText(/Pense no bicarbonato como uma base/)).toBeVisible();
-  await page.getByRole('button', { name: 'Continuar raciocínio', exact: true }).click();
-  await page.getByRole('button', { name: 'Aumentar a ventilação', exact: true }).click();
-  await page.getByRole('button', { name: 'Continuar raciocínio', exact: true }).click();
-  await page
-    .getByRole('button', { name: 'Não; pode ser a compensação esperada', exact: true })
-    .click();
-  await page.getByRole('button', { name: 'Concluir aula', exact: true }).click();
-  await expect(page.getByText('Você conectou as peças.')).toBeVisible();
+  await expect(
+    page.getByText('A tutoria com IA ainda não está conectada ao seu espaço pessoal.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ele aumenta', exact: true })).toHaveCount(0);
 });
 test('planner validates inputs and generates a 30-minute revision', async ({ page }) => {
   await page.goto('/planner?urgent=true');
@@ -156,7 +147,7 @@ test('tabs and responsive home render without overflow or console errors', async
     await page.goto(route);
     if (route === '/ai')
       await expect(page.getByRole('textbox', { name: 'Sua pergunta', exact: true })).toBeVisible();
-    else await expect(page.getByText('DEMONSTRAÇÃO', { exact: true })).toBeVisible();
+    else await expect(page.getByText('PESSOAL · LOCAL', { exact: true })).toBeVisible();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);

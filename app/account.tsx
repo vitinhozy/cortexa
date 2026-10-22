@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams, type Href } from 'expo-router';
-import { Badge, Button, Card, Field, Icon, Notice, Screen, T, s } from '@/components/ui';
+import { Button, Field, Icon, T } from '@/components/ui';
 import { Touch } from '@/components/Motion';
+import { AuthLayout } from '@/components/public/AuthLayout';
 import { colors, fonts } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/services/supabase';
 import { authEmailRedirect } from '@/services/authRedirect';
+import { safeReturnPath } from '@/services/authAccess';
 import { useAppNavigation } from '@/hooks/useAppNavigation';
 import { AccountFeedback } from '@/components/AccountFeedback';
 import { PasswordStrength } from '@/components/PasswordStrength';
@@ -22,12 +24,6 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function internalRoute(value: string | undefined): Href | undefined {
-  if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('\\'))
-    return undefined;
-  return value as Href;
 }
 
 function authErrorMessage(error: { code?: string }) {
@@ -48,7 +44,7 @@ function authErrorMessage(error: { code?: string }) {
 }
 
 export default function AccountScreen() {
-  const { goBack, replace } = useAppNavigation();
+  const { replace } = useAppNavigation();
   const { user, ready, configured } = useAuth();
   const params = useLocalSearchParams<{
     code?: string | string[];
@@ -62,8 +58,8 @@ export default function AccountScreen() {
   const code = firstParam(params.code);
   const authFlow = firstParam(params.authFlow);
   const nextPath = firstParam(params.next);
-  const nextRoute = internalRoute(nextPath);
-  const returnPath = String(nextRoute ?? '/overview');
+  const nextRoute = safeReturnPath(nextPath);
+  const returnPath = String(nextRoute ?? '/onboarding');
   const [stage, setStage] = useState<AccountStage>(
     code
       ? 'checking-link'
@@ -77,6 +73,9 @@ export default function AccountScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [focusedField, setFocusedField] = useState<'email' | 'password' | 'confirmation' | null>(
+    null,
+  );
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [confirmationPending, setConfirmationPending] = useState(false);
@@ -201,15 +200,19 @@ export default function AccountScreen() {
         ? 'Recupere seu acesso'
         : stage === 'new-password'
           ? 'Escolha uma nova senha'
-          : 'Entre na Cortexa';
+          : user
+            ? 'Você está no Cortexa'
+            : 'Entre no Cortexa';
   const subtitle =
     stage === 'sign-up'
-      ? 'Comece seu espaço pessoal de estudo.'
+      ? 'Seu próximo passo na Medicina começa aqui.'
       : stage === 'forgot'
         ? 'Enviaremos um link seguro para o e-mail da sua conta.'
         : stage === 'new-password'
           ? 'Use pelo menos 8 caracteres para proteger sua conta.'
-          : 'Acesse seu espaço pessoal para continuar de onde parou.';
+          : user
+            ? 'Tudo pronto para continuar seus estudos.'
+            : 'Seu espaço de estudo, de onde você parou.';
 
   async function submit() {
     if (!supabase || busy) return;
@@ -265,7 +268,7 @@ export default function AccountScreen() {
         setPassword('');
         setConfirmPassword('');
         setMessage('Senha atualizada. Sua conta está pronta para usar.');
-        setDestination(nextRoute ?? '/overview');
+        setDestination(nextRoute ?? '/onboarding');
         return;
       }
 
@@ -282,7 +285,7 @@ export default function AccountScreen() {
         setConfirmPassword('');
         if (data.session) {
           setMessage('Conta criada. Seu espaço pessoal está conectado.');
-          setDestination(nextRoute ?? '/overview');
+          setDestination(nextRoute ?? '/onboarding');
           router.setParams({ mode: undefined, authFlow: 'signin', next: returnPath });
         } else {
           setConfirmationPending(true);
@@ -302,7 +305,7 @@ export default function AccountScreen() {
       if (signInError) throw signInError;
       setPassword('');
       if (data.session) {
-        setDestination(nextRoute ?? '/overview');
+        setDestination(nextRoute ?? '/onboarding');
         router.setParams({ authFlow: 'signin', next: returnPath, code: undefined });
       }
     } catch (reason) {
@@ -355,11 +358,9 @@ export default function AccountScreen() {
   }
 
   return (
-    <Screen
+    <AuthLayout
       title={title}
       subtitle={subtitle}
-      back
-      contentMaxWidth={560}
       scrollResetKey={stage}
       overlay={
         <AccountFeedback
@@ -403,30 +404,29 @@ export default function AccountScreen() {
       }
     >
       {!configured ? (
-        <Card>
-          <View style={[s.row, { alignItems: 'flex-start' }]}>
-            <Icon name="shield" />
-            <View style={{ flex: 1, gap: 6 }}>
-              <T style={s.sectionTitle}>Acesso por conta indisponível</T>
-              <T muted>
-                A autenticação ainda não está configurada neste ambiente. Você pode continuar
-                estudando no espaço local deste dispositivo.
-              </T>
-            </View>
-          </View>
-        </Card>
+        <View style={styles.state}>
+          <Icon name="shield" size={28} />
+          <T accessibilityRole="header" style={styles.stateTitle}>
+            Acesso por conta indisponível
+          </T>
+          <T muted style={styles.stateDescription}>
+            Não é possível entrar ou criar uma conta neste ambiente agora. Volte ao início para
+            conhecer o Cortexa.
+          </T>
+          <Button title="Voltar ao início" icon="arrow-left" onPress={() => replace('/')} />
+        </View>
       ) : !ready || stage === 'checking-link' || (stage === 'new-password' && !user) ? (
-        <Card style={{ alignItems: 'center', gap: 14, paddingVertical: 30 }}>
+        <View accessibilityState={{ busy: true }} style={styles.loading}>
           <ActivityIndicator color={colors.primary} />
-          <T muted>
+          <T muted accessibilityLiveRegion="polite">
             {stage === 'checking-link'
               ? 'Validando seu link seguro...'
               : 'Verificando sua conta...'}
           </T>
-        </Card>
+        </View>
       ) : user && stage !== 'new-password' ? (
-        <Card style={{ gap: 18 }}>
-          <View style={{ alignItems: 'center', gap: 12 }}>
+        <View style={styles.state}>
+          <View style={{ gap: 12 }}>
             <View
               style={{
                 width: 62,
@@ -439,14 +439,16 @@ export default function AccountScreen() {
             >
               <Icon name="user-check" size={27} />
             </View>
-            <Badge label="CONTA CONECTADA" tone="green" />
-            <T style={s.sectionTitle}>{user.email}</T>
+            <T style={styles.stateTitle}>{user.email}</T>
           </View>
-          <Notice text="Seu estudo está separado por conta neste dispositivo. A sincronização geral entre dispositivos ainda não está disponível." />
+          <T muted style={styles.stateDescription}>
+            Seu estudo fica separado por conta neste dispositivo. A sincronização entre dispositivos
+            ainda não está disponível.
+          </T>
           <Button
             title="Continuar no Cortexa"
             icon="arrow-right"
-            onPress={() => replace(nextRoute ?? '/overview')}
+            onPress={() => replace(nextRoute ?? '/onboarding')}
           />
           <Button
             title={busy ? 'Saindo...' : 'Sair da conta'}
@@ -454,282 +456,266 @@ export default function AccountScreen() {
             disabled={busy}
             onPress={() => void signOut()}
           />
-        </Card>
+        </View>
       ) : (
-        <>
-          <Card style={{ gap: 17, paddingVertical: 22 }}>
-            <View style={[s.row, { alignItems: 'flex-start' }]}>
+        <View style={styles.fields}>
+          {stage === 'sign-in' || stage === 'sign-up' ? (
+            <>
               <View
                 style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 15,
-                  backgroundColor: colors.lavender,
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  borderBottomWidth: 1,
+                  borderBottomColor: colors.line,
+                  gap: 24,
                 }}
               >
-                <Icon name="user" size={21} />
-              </View>
-              <View style={{ flex: 1, gap: 4 }}>
-                <T style={s.sectionTitle}>Seu espaço. Seu ritmo.</T>
-                <T muted style={{ fontSize: 12 }}>
-                  {stage === 'sign-up'
-                    ? 'Crie sua conta com Google ou e-mail.'
-                    : 'Escolha como quer continuar.'}
-                </T>
-              </View>
-            </View>
-
-            {stage === 'sign-in' || stage === 'sign-up' ? (
-              <>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    padding: 4,
-                    borderRadius: 14,
-                    backgroundColor: colors.neutral,
-                    gap: 4,
-                  }}
-                >
-                  {(['sign-in', 'sign-up'] as const).map((option) => (
-                    <Touch
-                      key={option}
-                      accessibilityRole="button"
-                      accessibilityLabel={
-                        option === 'sign-in' ? 'Já tenho conta' : 'Quero criar uma conta'
-                      }
-                      accessibilityState={{ selected: stage === option, disabled: busy }}
-                      disabled={busy}
-                      onPress={() => {
-                        setStage(option);
-                        router.setParams({ mode: option === 'sign-up' ? 'signup' : undefined });
-                        setPassword('');
-                        setConfirmPassword('');
-                        setShowPassword(false);
-                        setMessage('');
-                        setError('');
-                      }}
+                {(['sign-in', 'sign-up'] as const).map((option) => (
+                  <Touch
+                    key={option}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      option === 'sign-in' ? 'Já tenho conta' : 'Quero criar uma conta'
+                    }
+                    accessibilityState={{ selected: stage === option, disabled: busy }}
+                    disabled={busy}
+                    onPress={() => {
+                      setStage(option);
+                      router.setParams({ mode: option === 'sign-up' ? 'signup' : undefined });
+                      setPassword('');
+                      setConfirmPassword('');
+                      setShowPassword(false);
+                      setMessage('');
+                      setError('');
+                    }}
+                    style={{
+                      minHeight: 44,
+                      paddingHorizontal: 3,
+                      borderBottomWidth: 2,
+                      borderBottomColor: stage === option ? colors.primary : 'transparent',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <T
                       style={{
-                        flex: 1,
-                        minHeight: 44,
-                        borderRadius: 11,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: stage === option ? colors.surface : 'transparent',
+                        fontSize: 13,
+                        fontFamily: fonts.semibold,
+                        color: stage === option ? colors.primaryDark : colors.muted,
                       }}
                     >
-                      <T
-                        style={{
-                          fontSize: 13,
-                          fontFamily: fonts.semibold,
-                          color: stage === option ? colors.primaryDark : colors.muted,
-                        }}
-                      >
-                        {option === 'sign-in' ? 'Entrar' : 'Criar conta'}
-                      </T>
-                    </Touch>
-                  ))}
-                </View>
-                <GoogleSignInButton
-                  busy={googleBusy}
-                  disabled={busy}
-                  onPress={() => void startGoogle()}
-                />
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View style={{ flex: 1, height: 1, backgroundColor: colors.line }} />
-                  <T muted style={{ fontSize: 11 }}>
-                    ou use seu e-mail
-                  </T>
-                  <View style={{ flex: 1, height: 1, backgroundColor: colors.line }} />
-                </View>
-              </>
-            ) : null}
+                      {option === 'sign-in' ? 'Entrar' : 'Criar conta'}
+                    </T>
+                  </Touch>
+                ))}
+              </View>
+              <GoogleSignInButton
+                busy={googleBusy}
+                disabled={busy}
+                onPress={() => void startGoogle()}
+              />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.line }} />
+                <T muted style={{ fontSize: 11 }}>
+                  ou use seu e-mail
+                </T>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.line }} />
+              </View>
+            </>
+          ) : null}
 
-            {stage !== 'new-password' ? (
-              <Field
-                label="E-mail"
-                placeholder="voce@exemplo.com"
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                autoComplete="email"
-                textContentType="emailAddress"
-                value={email}
-                editable={!busy}
-                onChangeText={(value) => {
-                  setEmail(value);
+          {stage !== 'new-password' ? (
+            <Field
+              label="E-mail"
+              placeholder="voce@exemplo.com"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              autoComplete="email"
+              textContentType="emailAddress"
+              value={email}
+              editable={!busy}
+              onChangeText={(value) => {
+                setEmail(value);
+                setError('');
+              }}
+              maxLength={254}
+              returnKeyType={stage === 'forgot' ? 'send' : 'next'}
+              onSubmitEditing={stage === 'forgot' ? () => void submit() : undefined}
+              onFocus={() => setFocusedField('email')}
+              onBlur={() => setFocusedField(null)}
+              style={{ borderColor: focusedField === 'email' ? colors.primary : colors.line }}
+            />
+          ) : null}
+
+          {stage === 'forgot' ? (
+            <>
+              <Button
+                title={busy ? 'Enviando link...' : 'Enviar link de recuperação'}
+                icon="mail"
+                disabled={busy}
+                onPress={() => void submit()}
+              />
+              <Button
+                title="Voltar para entrar"
+                variant="ghost"
+                disabled={busy}
+                onPress={() => {
+                  setStage('sign-in');
+                  setMessage('');
                   setError('');
                 }}
-                maxLength={254}
               />
-            ) : null}
-
-            {stage === 'forgot' ? (
-              <>
-                <Button
-                  title={busy ? 'Enviando link...' : 'Enviar link de recuperação'}
-                  icon="mail"
-                  disabled={busy}
-                  onPress={() => void submit()}
+            </>
+          ) : (
+            <>
+              <Field
+                label={stage === 'new-password' ? 'Nova senha' : 'Senha'}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoComplete={
+                  stage === 'sign-up' || stage === 'new-password'
+                    ? 'new-password'
+                    : 'current-password'
+                }
+                textContentType={
+                  stage === 'sign-up' || stage === 'new-password' ? 'newPassword' : 'password'
+                }
+                value={password}
+                editable={!busy}
+                onChangeText={(value) => {
+                  setPassword(value);
+                  setError('');
+                }}
+                maxLength={128}
+                placeholder={stage === 'sign-in' ? 'Sua senha' : 'Pelo menos 8 caracteres'}
+                returnKeyType={stage === 'sign-in' ? 'go' : 'next'}
+                onSubmitEditing={stage === 'sign-in' ? () => void submit() : undefined}
+                onFocus={() => setFocusedField('password')}
+                onBlur={() => setFocusedField(null)}
+                style={{
+                  borderColor: focusedField === 'password' ? colors.primary : colors.line,
+                }}
+              />
+              {stage === 'sign-up' || stage === 'new-password' ? (
+                <PasswordStrength password={password} />
+              ) : null}
+              {stage === 'sign-up' || stage === 'new-password' ? (
+                <Field
+                  label="Confirme a senha"
+                  placeholder="Digite a senha novamente"
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoComplete="new-password"
+                  textContentType="newPassword"
+                  value={confirmPassword}
+                  editable={!busy}
+                  onChangeText={(value) => {
+                    setConfirmPassword(value);
+                    setError('');
+                  }}
+                  maxLength={128}
+                  returnKeyType="go"
+                  onSubmitEditing={() => void submit()}
+                  onFocus={() => setFocusedField('confirmation')}
+                  onBlur={() => setFocusedField(null)}
+                  style={{
+                    borderColor: focusedField === 'confirmation' ? colors.primary : colors.line,
+                  }}
                 />
+              ) : null}
+              {(stage === 'sign-up' || stage === 'new-password') && confirmPassword ? (
+                <T
+                  accessibilityLiveRegion="polite"
+                  style={{
+                    fontSize: 12,
+                    color: password === confirmPassword ? colors.teal : colors.muted,
+                  }}
+                >
+                  {password === confirmPassword
+                    ? 'As senhas coincidem.'
+                    : 'As senhas ainda não coincidem.'}
+                </T>
+              ) : null}
+              <Touch
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                onPress={() => setShowPassword((shown) => !shown)}
+                style={{
+                  alignSelf: 'flex-end',
+                  minHeight: 44,
+                  justifyContent: 'center',
+                  paddingHorizontal: 8,
+                }}
+              >
+                <T style={{ color: colors.primary, fontFamily: fonts.medium, fontSize: 12 }}>
+                  {showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                </T>
+              </Touch>
+              <Button
+                title={
+                  busy
+                    ? 'Aguarde...'
+                    : stage === 'sign-up'
+                      ? 'Criar minha conta'
+                      : stage === 'new-password'
+                        ? 'Salvar nova senha'
+                        : 'Entrar'
+                }
+                icon={
+                  stage === 'sign-up' ? 'user-plus' : stage === 'new-password' ? 'check' : 'log-in'
+                }
+                disabled={busy}
+                onPress={() => void submit()}
+              />
+              {stage === 'sign-in' ? (
+                <>
+                  <Button
+                    title="Esqueci minha senha"
+                    variant="ghost"
+                    disabled={busy}
+                    onPress={() => {
+                      setStage('forgot');
+                      setPassword('');
+                      setMessage('');
+                      setError('');
+                    }}
+                  />
+                </>
+              ) : stage === 'new-password' ? (
                 <Button
                   title="Voltar para entrar"
                   variant="ghost"
                   disabled={busy}
                   onPress={() => {
                     setStage('sign-in');
+                    setPassword('');
+                    setConfirmPassword('');
                     setMessage('');
                     setError('');
                   }}
                 />
-              </>
-            ) : (
-              <>
-                <Field
-                  label={stage === 'new-password' ? 'Nova senha' : 'Senha'}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  autoComplete={
-                    stage === 'sign-up' || stage === 'new-password'
-                      ? 'new-password'
-                      : 'current-password'
-                  }
-                  textContentType={
-                    stage === 'sign-up' || stage === 'new-password' ? 'newPassword' : 'password'
-                  }
-                  value={password}
-                  editable={!busy}
-                  onChangeText={(value) => {
-                    setPassword(value);
-                    setError('');
-                  }}
-                  maxLength={128}
-                  placeholder={stage === 'sign-in' ? 'Sua senha' : 'Pelo menos 8 caracteres'}
-                  returnKeyType={stage === 'sign-in' ? 'go' : 'next'}
-                  onSubmitEditing={stage === 'sign-in' ? () => void submit() : undefined}
-                />
-                {stage === 'sign-up' || stage === 'new-password' ? (
-                  <PasswordStrength password={password} />
-                ) : null}
-                {stage === 'sign-up' || stage === 'new-password' ? (
-                  <Field
-                    label="Confirme a senha"
-                    placeholder="Digite a senha novamente"
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                    autoComplete="new-password"
-                    textContentType="newPassword"
-                    value={confirmPassword}
-                    editable={!busy}
-                    onChangeText={(value) => {
-                      setConfirmPassword(value);
-                      setError('');
-                    }}
-                    maxLength={128}
-                    returnKeyType="go"
-                    onSubmitEditing={() => void submit()}
-                  />
-                ) : null}
-                {(stage === 'sign-up' || stage === 'new-password') && confirmPassword ? (
-                  <T
-                    accessibilityLiveRegion="polite"
-                    style={{
-                      fontSize: 12,
-                      color: password === confirmPassword ? colors.teal : colors.muted,
-                    }}
-                  >
-                    {password === confirmPassword
-                      ? 'As senhas coincidem.'
-                      : 'As senhas ainda não coincidem.'}
-                  </T>
-                ) : null}
-                <Touch
-                  accessibilityRole="button"
-                  accessibilityLabel={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                  onPress={() => setShowPassword((shown) => !shown)}
-                  style={{
-                    alignSelf: 'flex-end',
-                    minHeight: 36,
-                    justifyContent: 'center',
-                    paddingHorizontal: 8,
-                  }}
-                >
-                  <T style={{ color: colors.primary, fontFamily: fonts.medium, fontSize: 12 }}>
-                    {showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                  </T>
-                </Touch>
-                <Button
-                  title={
-                    busy
-                      ? 'Aguarde...'
-                      : stage === 'sign-up'
-                        ? 'Criar minha conta'
-                        : stage === 'new-password'
-                          ? 'Salvar nova senha'
-                          : 'Entrar'
-                  }
-                  icon={
-                    stage === 'sign-up'
-                      ? 'user-plus'
-                      : stage === 'new-password'
-                        ? 'check'
-                        : 'log-in'
-                  }
-                  disabled={busy}
-                  onPress={() => void submit()}
-                />
-                {stage === 'sign-in' ? (
-                  <>
-                    <Button
-                      title="Esqueci minha senha"
-                      variant="ghost"
-                      disabled={busy}
-                      onPress={() => {
-                        setStage('forgot');
-                        setPassword('');
-                        setMessage('');
-                        setError('');
-                      }}
-                    />
-                  </>
-                ) : stage === 'new-password' ? (
-                  <Button
-                    title="Voltar para entrar"
-                    variant="ghost"
-                    disabled={busy}
-                    onPress={() => {
-                      setStage('sign-in');
-                      setPassword('');
-                      setConfirmPassword('');
-                      setMessage('');
-                      setError('');
-                    }}
-                  />
-                ) : null}
-              </>
-            )}
+              ) : null}
+            </>
+          )}
 
-            {confirmationPending ? (
-              <Button
-                title={busy ? 'Enviando...' : 'Reenviar confirmação de e-mail'}
-                variant="secondary"
-                disabled={busy}
-                onPress={() => void resendConfirmation()}
-              />
-            ) : null}
-          </Card>
-          <Notice text="Os dados do espaço pessoal ficam separados da demonstração. A sincronização entre dispositivos não está disponível nesta etapa." />
-          {stage !== 'new-password' ? (
+          {confirmationPending ? (
             <Button
-              title="Continuar sem conta"
-              variant="ghost"
+              title={busy ? 'Enviando...' : 'Reenviar confirmação de e-mail'}
+              variant="secondary"
               disabled={busy}
-              onPress={() => goBack('/profile')}
+              onPress={() => void resendConfirmation()}
             />
           ) : null}
-        </>
+        </View>
       )}
-    </Screen>
+    </AuthLayout>
   );
 }
+
+const styles = StyleSheet.create({
+  fields: { gap: 17 },
+  state: { gap: 18 },
+  stateTitle: { fontFamily: fonts.semibold, fontSize: 17, lineHeight: 25 },
+  stateDescription: { fontSize: 13, lineHeight: 22 },
+  loading: { alignItems: 'center', gap: 14, paddingVertical: 36 },
+});

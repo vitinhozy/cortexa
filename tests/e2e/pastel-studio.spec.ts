@@ -1,7 +1,8 @@
-import { test, expect, type Page } from '@playwright/test';
-import { demonstrationStorage, ensurePersonalWorkspace } from './workspace-helpers';
+import type { Page } from '@playwright/test';
+import { test, expect, personalStorageKey } from './fixtures';
+import { ensurePersonalWorkspace } from './workspace-helpers';
 
-test.use({ storageState: demonstrationStorage });
+test.use({ workspace: 'seeded' });
 
 async function personal(page: Page) {
   await ensurePersonalWorkspace(page);
@@ -127,16 +128,15 @@ test('manual cards and questions feed practice and survive a reload without AI',
     .fill('Uma pergunta pessoal');
   await page.getByRole('button', { name: 'Enviar pergunta', exact: true }).click();
   await expect(
-    page.getByText('Entre na sua conta para enviar a pergunta ao tutor.', { exact: true }),
+    page.getByText('O tutor ainda não está disponível neste ambiente.', { exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByRole('button', { name: 'Entrar ou criar conta', exact: true }),
-  ).toBeVisible();
-  expect(
-    await page.evaluate(
-      () => JSON.parse(localStorage.getItem('cortexa:personal:local:v1') ?? '{}').conversations,
-    ),
-  ).toEqual([]);
+  const conversations = await page.evaluate(
+    (key) => JSON.parse(localStorage.getItem(key) ?? '{}').conversations,
+    personalStorageKey,
+  );
+  expect(conversations).toHaveLength(1);
+  expect(conversations[0].messages).toHaveLength(1);
+  expect(conversations[0].messages[0].role).toBe('user');
 });
 
 test('desktop sidebar, centered creation menu and pastel tools fit phone, tablet and desktop', async ({
@@ -178,12 +178,13 @@ test('desktop sidebar, centered creation menu and pastel tools fit phone, tablet
         await expect(
           page.getByRole('textbox', { name: 'Sua pergunta', exact: true }),
         ).toBeVisible();
-      else await expect(page.getByText('DEMONSTRAÇÃO', { exact: true })).toBeVisible();
+      else await expect(page.getByText('PESSOAL · LOCAL', { exact: true })).toBeVisible();
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       ).toBe(true);
     }
     await page.goto('/overview');
+    await expect(page.getByText('Olá, Victor.', { exact: true })).toBeVisible();
     await page.screenshot({ path: `docs/screenshots/pastel-home-${width}.png` });
   }
   expect(errors).toEqual([]);

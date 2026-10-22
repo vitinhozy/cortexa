@@ -7,8 +7,6 @@ import { Reveal } from '@/components/Motion';
 import { colors, fonts, themeTint } from '@/constants/theme';
 import { router } from 'expo-router';
 import { hasSeenIntroduction, markIntroductionSeen } from '@/services/introductions';
-import { GoogleSignInButton } from '@/components/GoogleSignInButton';
-import { useAuth } from '@/hooks/useAuth';
 
 const steps: { title: string; subtitle: string; icon: IconName; label: string; detail: string }[] =
   [
@@ -34,11 +32,10 @@ const steps: { title: string; subtitle: string; icon: IconName; label: string; d
       icon: 'compass',
       label: 'Comece com o essencial',
       detail:
-        'Seu progresso começa do zero. Os dados ficam neste dispositivo e você pode usar o app sem criar uma conta.',
+        'Seu progresso começa do zero. Organize seu estudo em um espaço separado por conta neste dispositivo.',
     },
   ];
 export default function OnboardingScreen() {
-  const auth = useAuth();
   const [step, setStep] = useState(0);
   const [configure, setConfigure] = useState(false);
   const [ready, setReady] = useState(false);
@@ -70,17 +67,6 @@ export default function OnboardingScreen() {
     await markIntroductionSeen('welcome');
     setConfigure(true);
   }
-  async function openAccount(choice: 'email' | 'signup' | 'google') {
-    await markIntroductionSeen('welcome');
-    router.push({
-      pathname: '/account',
-      params: {
-        next: '/overview',
-        ...(choice === 'signup' ? { mode: 'signup' } : {}),
-        ...(choice === 'google' ? { provider: 'google' } : {}),
-      },
-    });
-  }
   return (
     <Screen
       title={current.title}
@@ -90,19 +76,6 @@ export default function OnboardingScreen() {
       searchable={false}
       eyebrow="BEM-VINDO AO CORTEXA"
     >
-      {step === 0 && auth.configured && !auth.user ? (
-        <Card style={{ gap: 10 }}>
-          <T style={s.sectionTitle}>Como você quer começar?</T>
-          <GoogleSignInButton onPress={() => void openAccount('google')} />
-          <Button title="Criar conta" icon="user-plus" onPress={() => void openAccount('signup')} />
-          <Button
-            title="Já tenho uma conta"
-            variant="ghost"
-            onPress={() => void openAccount('email')}
-          />
-          <Button title="Continuar sem conta" variant="ghost" onPress={() => void skip()} />
-        </Card>
-      ) : null}
       <Reveal key={step}>
         <LinearGradient
           colors={[

@@ -1,7 +1,6 @@
-import { test, expect } from '@playwright/test';
-import { demonstrationStorage } from './workspace-helpers';
+import { test, expect } from './fixtures';
 
-test.use({ storageState: demonstrationStorage });
+test.use({ workspace: 'seeded' });
 
 test('library creates a colored folder, groups materials and expands search from the right', async ({
   page,

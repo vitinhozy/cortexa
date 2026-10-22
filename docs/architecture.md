@@ -8,21 +8,29 @@ A reformulação de Questões/Simulados, os estados persistidos, a heurística d
 
 ## Escopo atual
 
-Expo SDK 54, React Native, TypeScript estrito e Expo Router. A aplicação oferece jornada acadêmica progressiva e memória local compartilhada entre prática, cartões, estudo, erros e recomendações, preservando a demonstração. IA, RAG, aulas e sincronização remotos continuam dependentes de integração real.
+Expo SDK 54, React Native, TypeScript estrito e Expo Router. A aplicação oferece entrada pública e área autenticada com jornada acadêmica progressiva e memória local compartilhada entre prática, cartões, estudo, erros e recomendações. Snapshots demonstrativos históricos são preservados, mas a demonstração interativa anônima não faz parte do acesso atual. RAG, aulas e sincronização remotos continuam dependentes de integração real.
 
 ```text
-AuthProvider (opcional, Supabase Auth)
-  → StudyProvider escolhe demonstração, pessoal local ou espaço da conta
+AuthProvider (cliente ausente sem configuração; usuário validado por auth.getUser)
+  → rotas públicas: / e /account
+  → ProtectedRoute no screenLayout raiz para todos os demais caminhos
+  → StudyProvider usa personal para identidade validada
   → repositório isolado + createServices
   → telas Expo Router
   → serviços validam entradas e atualizam entidades relacionadas
   → snapshot estável + fila serial de gravações AsyncStorage
 ```
 
+`ProtectedRoute` aguarda a validação da sessão antes de montar conteúdo privado. Links diretos guardam o destino interno permitido na query `next`; autenticação ausente ou inválida leva a `/account`. `safeReturnPath` recusa esquemas externos, barra dupla, segmentos codificados perigosos, rotas públicas e caminhos fora do catálogo conhecido.
+
+`app/account.tsx` reutiliza login, cadastro, Google, PKCE, confirmação de e-mail, recuperação e redefinição de senha. A primeira sessão sem um destino explícito leva a `/onboarding`. Sessões existentes que tentam abrir uma rota privada permanecem no destino solicitado após validação.
+
+O asset `assets/cortexa-brain.png` é decorativo e a demonstração da interface usa dados fictícios claramente rotulados. `constants/publicExperience.ts` deixa a URL do vídeo real sem valor até o arquivo otimizado `cortexa-demo.mp4` estar disponível; nenhuma mídia externa é buscada hoje. O controle de rota valida acesso no cliente; políticas de backend e autorização por proprietário continuam necessárias para qualquer serviço ou dado remoto.
+
 ## Identidade, isolamento e persistência
 
-- Demonstração: chave histórica `cortexa:demo:v1`, compatível com snapshots anteriores.
-- Pessoal sem conta: `cortexa:personal:local:v1`, criado vazio por `services/personalWorkspace.ts`.
+- Demonstração: chave histórica `cortexa:demo:v1`, preservada para compatibilidade, sem navegação anônima.
+- Pessoal sem conta: chave histórica `cortexa:personal:local:v1`, preservada, sem navegação anônima.
 - Conta autenticada: `cortexa:personal:<auth-user-id>:v1`. Login não importa dados da demonstração nem do espaço local. Logout remove o acesso ao espaço da conta pela interface; seus dados locais não são apagados.
 - Preferência de espaço: `cortexa:workspace`. A conta autenticada sempre usa um espaço pessoal.
 - A troca de identidade hidrata o próximo repositório antes de assumir seu contexto. Durante a transição, o conteúdo anterior fica oculto, inacessível e sem interação; os Modals de BottomSheet são suspensos imediatamente. Stack e Tabs preservam a rota. `WorkspaceScreen`, aplicado nas folhas dos dois navegadores, descarta rascunhos e estados de telas por identidade sem reiniciar a navegação. A troca manual aguarda a fila de gravações do repositório comprometido.
@@ -54,7 +62,7 @@ Uma anotação pode reutilizar o assunto pelo nome dentro da mesma disciplina. A
 
 ## Navegação e componentes
 
-As cinco abas existentes foram preservadas. A partir de 900 px, o usuário pode escolher entre navegação inferior e lateral; abaixo disso, usa a barra inferior. A visão geral distribui conteúdo em colunas conforme a largura disponível. Nenhuma tela usa elementos DOM.
+`app/index.tsx` ocupa `/` com a landing pública; o antigo `app/(tabs)/index.tsx` foi removido. Somente `/` e `/account` são públicos. `ProtectedRoute`, aplicado pelo `screenLayout` do layout raiz, aguarda `useAuth.ready`, exige `useAuth.user` validado e bloqueia a renderização dos filhos privados. `services/authAccess.ts` limita `next` a destinos internos conhecidos. Login sem destino inicia o onboarding na primeira conta ainda não configurada. As cinco abas e a sidebar pertencem à área de estudo. A partir de 900 px, o usuário pode escolher entre navegação inferior e lateral; abaixo disso, usa a barra inferior. Nenhuma tela usa elementos DOM.
 
 `useAppNavigation` usa o histórico do Expo Router para o botão Voltar. `Screen.backTo` é apenas o destino de apoio quando não existe uma etapa anterior, como em um link aberto diretamente. As abas usam `backBehavior="history"`; as ferramentas do menu abrem com `router.push`, preservando a tela de origem e suas etapas. Conversar é a única entrada do chat no menu principal.
 
@@ -72,13 +80,13 @@ As cinco abas existentes foram preservadas. A partir de 900 px, o usuário pode 
 
 `features/study/search.ts` busca exclusivamente no snapshot atual, normaliza acentos e aceita categorias. O resultado aponta para o material, assunto, questão ou card escolhido. Cards abertos pela busca podem ser consultados antes do vencimento; avaliar explicitamente o card reagenda sua revisão. `features/study/rhythm.ts` monta os últimos sete dias apenas com sessões concluídas, tentativas e revisões registradas; não transforma contadores demonstrativos em atividade inventada.
 
-O onboarding oferece três etapas introdutórias antes do formulário existente. Sua primeira tela também oferece Google, criação de conta, entrada por e-mail e continuação local quando Auth está configurado. A tela Plus é uma prévia, com períodos selecionáveis, sem preços inventados, checkout ou restauração de compras. A tela de conta oferece e-mail e o fluxo OAuth Google; a sessão depende de validação pelo Auth. Lembretes salvam horário e preferências locais, sem solicitar permissão ou agendar notificações. A apresentação da IA mantém as fontes demonstrativas identificadas.
+O onboarding autenticado oferece três etapas introdutórias antes do formulário existente, sem “continuar sem conta”. Landing e conta concentram as chamadas de acesso. A tela Plus é uma prévia, com períodos selecionáveis, sem preços inventados, checkout ou restauração de compras. A tela de conta oferece e-mail e o fluxo OAuth Google; a sessão depende de validação pelo Auth. Lembretes salvam horário e preferências locais, sem solicitar permissão ou agendar notificações.
 
 Pontos de integração futuros: outros provedores sociais devem passar pelo serviço de autenticação e validação de identidade existente; assinaturas exigem serviço de compras e verificação de direitos no servidor; push exige serviço de permissões, tokens e agendamento. Nenhuma dessas integrações deve inferir sucesso a partir das escolhas visuais salvas.
 
 ## Autenticação Supabase e experiência de conta
 
-`services/supabase.ts` cria o cliente somente com URL HTTPS válida e chave publicável `sb_publishable_`, e usa PKCE para os retornos por e-mail. Sem configuração, nenhum cliente é criado e o app segue funcionando localmente. Chaves secretas e `service_role` são recusadas como configuração pública. Isso não é autorização de backend: o bundle sempre expõe variáveis `EXPO_PUBLIC_*`.
+`services/supabase.ts` cria o cliente somente com URL HTTPS válida e chave publicável `sb_publishable_`, e usa PKCE para os retornos por e-mail. Sem configuração, nenhum cliente é criado: a landing permanece disponível, a conta informa indisponibilidade e as demais rotas continuam protegidas. Dados locais não são apagados nem liberados anonimamente. Chaves secretas e `service_role` são recusadas como configuração pública. O bloqueio de navegação não substitui autorização de backend: o bundle sempre expõe variáveis `EXPO_PUBLIC_*`.
 
 `hooks/useAuth.tsx` valida o usuário com `auth.getUser`, acompanha login/logout/renovação, recuperação e atualização do usuário, e controla auto-refresh pelo AppState. Um contador descarta respostas antigas de validação. Os eventos de autenticação não executam chamadas assíncronas dentro do callback síncrono do SDK. `app/account.tsx` oferece login e cadastro por e-mail, confirmação e reenvio, solicitação de recuperação, troca da senha via link PKCE, Google, erros e saída. `services/authRedirect.ts` preserva a tela de origem sem dupla codificação dos parâmetros. `EXPO_PUBLIC_AUTH_WEB_REDIRECT_URL` pode fixar o retorno por e-mail; OAuth web usa a origem atual, onde está seu verificador PKCE.
 
@@ -153,7 +161,7 @@ upload privado autorizado → MIME/tamanho → fila de processamento
 
 A fonte deve distinguir material próprio (ID, página/trecho), evidência externa verificada (metadados obtidos de fonte real) e exemplo simulado. Sem recuperação verificável, responder que não há fonte verificada. Nunca promover fontes do mock a evidência nem gerar DOI/PMID por inferência. Documentos e transcrições são dados não confiáveis, não instruções de sistema. Autenticação, propriedade, rate limit e limites de custo devem ser verificados no endpoint.
 
-O leitor PDF, histórico de IA pessoal, gravação/transcrição automática de aulas, player sincronizado, mapas gerados por IA e podcasts continuam no roteiro. O histórico atual guarda apenas conversas locais da demonstração; o estúdio local organiza conteúdo escrito pelo usuário, sem representar processamento remoto fictício.
+O leitor PDF, gravação/transcrição automática de aulas, player sincronizado, mapas gerados por IA e podcasts continuam no roteiro. O histórico pessoal guarda conversas no repositório da identidade; o estúdio local organiza conteúdo escrito pelo usuário, sem representar processamento remoto fictício.
 
 ## Estudo e repetição espaçada
 
@@ -163,9 +171,9 @@ Planos validam data, assuntos e 5–480 minutos/dia; horizonte máximo de 60 dia
 
 ## Identidade pastel e estúdio local
 
-`constants/theme.ts` centraliza violeta (#7C3AED) e lavanda; o azul da marca fica no símbolo e em poucos detalhes. `BrandLogo` usa o símbolo da identidade visual, e `app.json` aplica o ícone nos alvos nativos. `AppearanceProvider` salva tema claro/escuro em uma chave própria do AsyncStorage, sem depender do espaço de estudo. O chat é a rota inicial; o painel original está na aba Visão geral. A navegação mantém o Expo Router, enquanto `DesktopSidebar` fica no layout raiz para persistir em documentos e editores. `GlassTabBar` exibe somente as cinco abas móveis visíveis. `ChatComposer` mantém o campo fixo no rodapé com um brilho violeta discreto.
+`constants/theme.ts` centraliza violeta (#7C3AED) e lavanda; o azul da marca fica no símbolo e em poucos detalhes. `BrandLogo` usa o símbolo da identidade visual, e `app.json` aplica o ícone nos alvos nativos. `AppearanceProvider` salva tema claro/escuro em uma chave própria do AsyncStorage, sem depender do espaço de estudo. A landing é a rota inicial pública; chat e Visão geral pertencem à área autenticada. A navegação mantém o Expo Router, enquanto `DesktopSidebar` persiste entre documentos e editores privados. `GlassTabBar` exibe somente as cinco abas móveis visíveis. `ChatComposer` mantém o campo fixo no rodapé com um brilho violeta discreto.
 
-`MockAIService` cria uma conversa com ID independente por chat. `app/history.tsx` lista e reabre conversas da demonstração, ordenadas pela mensagem mais recente. O espaço pessoal não envia nem persiste perguntas para um provedor de IA; a tela explica a ausência de integração.
+`MockAIService` permanece no código para compatibilidade dos exemplos, sem entrada pública interativa. `app/history.tsx` lista e reabre conversas do repositório atual, ordenadas pela mensagem mais recente. O espaço pessoal envia perguntas pelo transporte autenticado existente; falha não produz resposta simulada. A entrega de acesso não revalida o provider remoto.
 
 `Reveal` tem uma variante de expansão por mola, com escalas horizontal e vertical distintas. `BottomSheet` abre centralizado a partir de 900 px e junto à borda inferior em telas menores; usa expansão elástica na entrada e recolhimento na saída. Opacidade é limitada ao intervalo válido durante o rebote. A opção de reduzir movimento elimina as animações. Nenhuma dependência nativa foi acrescentada neste incremento.
 
@@ -180,5 +188,17 @@ Futuras integrações de transcrição, extração e geração devem criar rascu
 O tempo da sessão é contado em minutos completos desde a abertura até concluir, inclusive tempo em background. Detecção de inatividade e deduplicação entre duas sessões simultâneas ainda precisam ser implementadas antes de usar esse número como medida precisa de atenção.
 
 ## Orientação e retorno entre telas
+
+### Contrato E2E do acesso obrigatório
+
+`tests/e2e/fixtures.ts` oferece estados `public`, `personal` e `seeded`. A sessão sintética de `mocks/auth.ts:createSimulatedAuthSession` entra em `sb-cortexa-e2e-auth-token` antes da primeira navegação; `/auth/v1/user` controlado valida essa sessão no fluxo normal de `useAuth`. O domínio `.invalid` é interceptado no navegador. Não há bypass, credenciais ou alterações de produção para testes.
+
+Quando um cenário precisa do catálogo legado, a fixture grava conteúdo sintético em `cortexa:personal:<id>:v1`, com `workspace: personal` e proprietário igual ao usuário validado. Isso é necessário porque `hooks/useStudy.tsx` força modo pessoal para qualquer identidade validada. Contas reais continuam vazias; `cortexa:workspace=demo` não concede acesso. Minutos e tentativas pessoais seguem a reconciliação real do repositório, sem copiar totais demonstrativos.
+
+Os testes mantêm prática, persistência, biblioteca, navegação e acessibilidade; cenários exclusivos da demonstração removida agora verificam o contrato pessoal. Respostas controladas de chat se identificam como SIMULADAS; falhas de IA não geram respostas ou conceitos fictícios. `public-entry.spec.ts` cobre landing, links privados, validação pendente/recusada, snapshots preservados e `next` inseguro. `offline.spec.ts` cobre somente entrada pública e bloqueio sem configuração. Nenhum `skip` generalizado foi adicionado.
+
+Execução E2E, servidores, builds e porta 8081 ficam com o coordenador; este trabalho isolado não os executou. Após integração, rodar `npm run test:e2e` e `npm run test:e2e:offline` de forma serial. Referências anteriores a `demonstrationStorage` ou estudo anônimo em documentos históricos de qualidade não definem o contrato atual descrito aqui.
+
+Context7 não está disponível nesta sessão; foram consultadas fontes oficiais: [Expo Router Authentication](https://docs.expo.dev/router/advanced/authentication/), [React Native Animated](https://reactnative.dev/docs/animated) e [Supabase React Native Auth quickstart](https://supabase.com/docs/guides/auth/quickstarts/react-native). A revisão de testes/docs não representa validação remota atual, execução em Expo Go físico ou teste em iPhone físico.
 
 `constants/navigation.ts` define a hierarquia visível e os destinos de retorno para links diretos. Ferramentas de prática pertencem a Estudar; documentos e seus formatos pertencem à Biblioteca. `Screen` apresenta esse caminho acima do título, e o menu lateral destaca a área com um subtítulo para a ferramenta atual. `AppNavigationProvider` usa o histórico observado dentro do app; sem uma origem observada, retorna ao pai definido para a tela. As etapas de preparação e os detalhes de revisão usam estado local nos pop-ups, com fechamento concluído antes de navegar para a prática.

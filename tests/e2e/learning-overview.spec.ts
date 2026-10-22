@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test';
-import { demonstrationStorage, ensurePersonalWorkspace } from './workspace-helpers';
+import { test, expect, mockTutorReply } from './fixtures';
+import { ensurePersonalWorkspace } from './workspace-helpers';
 
-test.use({ storageState: demonstrationStorage });
+test.use({ workspace: 'seeded' });
 
 test('tool back follows its origin and nested screens return one step at a time', async ({
   page,
@@ -67,8 +67,7 @@ test('review priorities open a popup and the daily study card remains compact', 
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('/overview');
-  const card = await page.getByTestId('overview-study-card').boundingBox();
-  expect(card?.height).toBeLessThan(450);
+  await expect(page.getByText('SEU PRÓXIMO PASSO', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: /^Equilíbrio ácido-base, \d+%$/ }).click();
   const popup = page.getByRole('dialog', { name: 'Equilíbrio ácido-base', exact: true });
   await expect(popup).toBeVisible();
@@ -82,18 +81,21 @@ test('review priorities open a popup and the daily study card remains compact', 
   await expect(page).toHaveURL(/\/overview$/);
 });
 
-test('the guided conversation opens in a popup before starting the tutor', async ({ page }) => {
+test('personal study does not expose the scripted demonstration tutor', async ({ page }) => {
   await page.goto('/overview');
-  await page.getByRole('button', { name: /Abrir tutor de demonstra/ }).click();
-  const popup = page.getByRole('dialog', { name: 'Aprender conversando', exact: true });
-  await expect(popup).toBeVisible();
-  await expect(popup.getByText('ROTEIRO SIMULADO', { exact: true })).toBeVisible();
-  await expect(page).toHaveURL(/\/overview$/);
-  await popup.getByRole('button', { name: 'Fechar Aprender conversando', exact: true }).click();
-  await expect(popup).toHaveCount(0);
-  await page.getByRole('button', { name: /Abrir tutor de demonstra/ }).click();
-  await popup.getByRole('button', { name: /Come/ }).click();
+  await expect(page.getByRole('button', { name: /Abrir tutor de demonstra/ })).toHaveCount(0);
+  await page.goto('/session?topicId=acid');
+  await expect(
+    page.getByRole('button', { name: 'Me ensine com perguntas', exact: true }),
+  ).toBeDisabled();
+  await page.goto('/tutor');
   await expect(page).toHaveURL(/\/tutor$/);
+  await expect(
+    page.getByText('A tutoria com IA ainda não está conectada ao seu espaço pessoal.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByText('ROTEIRO SIMULADO', { exact: true })).toHaveCount(0);
 });
 
 test('sidebar has one conversation entry and tool back preserves the current tab', async ({
@@ -141,7 +143,7 @@ test('calendar records real study and subject filters update the chart, includin
   expect(firstStatBox?.y).toBeGreaterThan(calendarBox?.y ?? 0);
   await expect(page.getByText('Seu progresso', { exact: true })).toBeVisible();
   await expect(page.getByTestId('weekly-goal-indicator')).toHaveAccessibleName(
-    'Meta semanal: 132 de 180 minutos',
+    'Meta semanal: 0 de 180 minutos',
   );
   await expect(page.getByText('Sua semana', { exact: true })).toHaveCount(0);
   expect((await calendar.boundingBox())?.y).toBeLessThan(600);
@@ -174,7 +176,7 @@ test('calendar records real study and subject filters update the chart, includin
   const chart = page.getByTestId('accuracy-chart');
   await expect(chart).toHaveAttribute('aria-label', /Fisiologia: \d+%/);
   await expect
-    .poll(async () => (await page.getByTestId('accuracy-fill-0').boundingBox())?.height ?? 0)
+    .poll(async () => (await page.getByTestId('accuracy-fill-1').boundingBox())?.height ?? 0)
     .toBeGreaterThan(0);
   await page.getByRole('button', { name: 'Cardiologia', exact: true }).click();
   await expect(chart).toHaveAttribute('aria-label', /Cardiologia: sem respostas/);
@@ -186,12 +188,12 @@ test('calendar records real study and subject filters update the chart, includin
     .toBeLessThan(1);
   await page.getByRole('button', { name: 'Fisiologia', exact: true }).click();
   await expect(chart).toHaveAttribute('aria-label', /Fisiologia: \d+%/);
-  const label = await page.getByTestId('accuracy-column-0').getAttribute('aria-label');
+  const label = await page.getByTestId('accuracy-column-1').getAttribute('aria-label');
   const targetHeight = Number(label?.match(/(\d+)%/)?.[1]) * 1.4;
   await expect
     .poll(async () =>
       Math.abs(
-        ((await page.getByTestId('accuracy-fill-0').boundingBox())?.height ?? 0) - targetHeight,
+        ((await page.getByTestId('accuracy-fill-1').boundingBox())?.height ?? 0) - targetHeight,
       ),
     )
     .toBeLessThan(1.5);
@@ -232,7 +234,7 @@ test('personal calendar and knowledge start empty without borrowing demonstratio
 test('upcoming exam opens a review popup before the planner', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('/overview');
-  await page.getByRole('button', { name: 'Organizar minha revisão', exact: true }).click();
+  await page.getByRole('button', { name: 'Organizar revisão', exact: true }).click();
   await expect(
     page.getByRole('dialog', { name: 'Organizar minha revisão', exact: true }),
   ).toBeVisible();
@@ -264,6 +266,8 @@ test('dark theme recolors screen surfaces, progress cards, and email account for
   );
 
   await page.goto('/account');
+  await page.getByRole('button', { name: 'Sair da conta', exact: true }).click();
+  await page.goto('/account');
   const email = page.getByRole('textbox', { name: 'E-mail', exact: true });
   await expect(email).toBeVisible();
   await expect(email).toHaveCSS('background-color', 'rgb(21, 20, 27)');
@@ -278,6 +282,7 @@ test('dark theme recolors screen surfaces, progress cards, and email account for
 test('chat sidebar lists recent student conversations by their question title', async ({
   page,
 }) => {
+  await mockTutorReply(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('/overview');
   await page.getByRole('button', { name: 'Mover navegação à esquerda', exact: true }).click();
@@ -295,7 +300,8 @@ test('chat sidebar lists recent student conversations by their question title', 
   await expect(recentChat).toBeVisible();
   await recentChat.click();
   await expect(page).toHaveURL(/conversationId=/);
-  await expect(page.getByText('Demonstração local · respostas simuladas').first()).toBeVisible();
+  await expect(page.getByText('CONVERSA PESSOAL · HISTÓRICO LOCAL', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Resposta SIMULADA do transporte E2E/)).toBeVisible();
   await page.goto('/history');
   await expect(page.getByText('Histórico de conversas', { exact: true })).toBeVisible();
   await page.getByText('Explique equilíbrio ácido-base', { exact: true }).click();

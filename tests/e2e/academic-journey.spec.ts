@@ -1,7 +1,10 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test, personalStorageKey } from './fixtures';
 import { ensurePersonalWorkspace } from './workspace-helpers';
 
-async function snapshot(page: Page, key = 'cortexa:personal:local:v1') {
+test.use({ workspace: 'seeded' });
+
+async function snapshot(page: Page, key = personalStorageKey) {
   return page.evaluate((storageKey) => JSON.parse(localStorage.getItem(storageKey) ?? '{}'), key);
 }
 async function personal(page: Page) {
@@ -54,11 +57,6 @@ test('short journey onboarding persists year precision and confirmed transitions
 test('question, confidence, error and flashcard update one conceptual memory and keep historical stage', async ({
   page,
 }) => {
-  await page.goto('/profile');
-  await page.getByRole('button', { name: 'Explorar demonstração', exact: true }).click();
-  await expect
-    .poll(() => page.evaluate(() => localStorage.getItem('cortexa:workspace')))
-    .toBe('demo');
   await page.goto('/profile-edit');
   await page.getByRole('button', { name: 'Fundamentos da graduação', exact: true }).click();
   await page.getByRole('button', { name: 'Salvar perfil', exact: true }).click();
@@ -69,7 +67,7 @@ test('question, confidence, error and flashcard update one conceptual memory and
   await page.getByRole('button', { name: 'Responder', exact: true }).click();
   await page.getByRole('button', { name: 'Tinha certeza', exact: true }).click();
   await page.getByRole('button', { name: 'Criar flashcard deste erro', exact: true }).click();
-  const key = 'cortexa:demo:v1';
+  const key = personalStorageKey;
   await expect.poll(async () => (await snapshot(page, key)).attempts.length).toBe(1);
   const before = await snapshot(page, key);
   const card = before.flashcards.find(

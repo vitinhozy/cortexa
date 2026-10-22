@@ -1,9 +1,10 @@
-import { expect, test, type Page } from '@playwright/test';
-import { demonstrationStorage, ensurePersonalWorkspace } from './workspace-helpers';
+import type { Page } from '@playwright/test';
+import { expect, test, mockTutorReply, personalStorageKey } from './fixtures';
+import { ensurePersonalWorkspace } from './workspace-helpers';
 
-test.use({ storageState: demonstrationStorage });
+test.use({ workspace: 'seeded' });
 
-async function snapshot(page: Page, key = 'cortexa:demo:v1') {
+async function snapshot(page: Page, key = personalStorageKey) {
   return page.evaluate((storageKey) => JSON.parse(localStorage.getItem(storageKey) ?? '{}'), key);
 }
 async function answer(page: Page, option = 0, confidence = 'Tinha certeza') {
@@ -25,6 +26,7 @@ test('practice home opens without the resume panel or large mode buttons', async
 test('material picker groups source types and preserves selections across search and collapse', async ({
   page,
 }) => {
+  await mockTutorReply(page);
   await page.goto('/ai?topicId=acid');
   await page
     .getByRole('textbox', { name: 'Sua pergunta', exact: true })
@@ -206,9 +208,7 @@ test('personal text and authored questions stay grounded in their source without
     .getByRole('textbox', { name: 'Texto ou anotação', exact: true })
     .fill('O conteúdo pessoal está conectado à questão que vou criar.');
   await page.getByRole('button', { name: 'Salvar e escolher conteúdo', exact: true }).click();
-  await expect
-    .poll(async () => (await snapshot(page, 'cortexa:personal:local:v1')).materials.length)
-    .toBe(2);
+  await expect.poll(async () => (await snapshot(page)).materials.length).toBe(2);
   await page.getByRole('button', { name: 'Criar questão com esta fonte', exact: true }).click();
   await page
     .getByRole('textbox', { name: 'Conceito ou subtópico (opcional)', exact: true })
@@ -239,7 +239,7 @@ test('personal text and authored questions stay grounded in their source without
   ).toBeVisible();
   await page.reload();
   await expect(page.getByText('Você acertou.', { exact: true })).toBeVisible();
-  const personal = await snapshot(page, 'cortexa:personal:local:v1');
+  const personal = await snapshot(page);
   expect(personal.questions).toHaveLength(1);
   expect(personal.questions[0].authored).toBe(true);
   expect(personal.attempts[0].confidence).toBe('guess');

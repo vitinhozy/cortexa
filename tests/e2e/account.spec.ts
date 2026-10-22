@@ -1,6 +1,7 @@
-import { expect, test } from '@playwright/test';
-import { ensurePersonalWorkspace } from './workspace-helpers';
+import { expect, test, personalStorageKey, authStorageKey } from './fixtures';
 import { createSimulatedAuthSession, simulatedAuthUser } from '../../mocks/auth';
+
+test.use({ workspace: 'public' });
 
 test('email account screen supports sign-up, password visibility and forgot-password validation', async ({
   page,
@@ -66,9 +67,7 @@ test('sign-up confirmation remains visible above a scrolled mobile form', async 
   await page.getByRole('button', { name: 'Criar minha conta', exact: true }).click();
   await expect(page.getByTestId('account-feedback')).toContainText('Confira seu e-mail');
   await expect(page.getByTestId('account-feedback')).toContainText('Se você já tinha conta');
-  await page
-    .getByRole('button', { name: 'Continuar sem conta', exact: true })
-    .scrollIntoViewIfNeeded();
+  await page.getByRole('button', { name: 'Já tenho conta', exact: true }).scrollIntoViewIfNeeded();
   const feedback = await page.getByTestId('account-feedback').boundingBox();
   expect(feedback?.y).toBeLessThan(90);
   expect((feedback?.y ?? 999) + (feedback?.height ?? 999)).toBeLessThan(360);
@@ -96,15 +95,13 @@ test('Google unavailable keeps the learner in the app with an honest top notice'
   await expect(page.getByRole('textbox', { name: 'E-mail', exact: true })).toBeEnabled();
 });
 
-test('welcome offers Google and account creation before starting the introduction', async ({
-  page,
-}) => {
-  await page.goto('/');
-  await expect(page.getByRole('button', { name: 'Continuar com Google' })).toBeInViewport();
-  await expect(page.getByRole('button', { name: 'Criar conta', exact: true })).toBeInViewport();
-  await page.getByRole('button', { name: 'Criar conta', exact: true }).click();
-  await expect(page).toHaveURL(/\/account\?.*mode=signup/);
+test('public account can open sign-up without entering the study workspace', async ({ page }) => {
+  await page.goto('/account?mode=signup');
   await expect(page.getByRole('heading', { name: 'Crie sua conta' })).toBeVisible();
+  await expect(page.getByRole('tab')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Continuar sem conta', exact: true })).toHaveCount(
+    0,
+  );
 });
 
 test('controlled Google PKCE callback exchanges once and returns to the requested chat', async ({
@@ -178,7 +175,7 @@ test('password recovery validates the session across workspace remount and retur
   expect(updated).toBe(true);
 });
 
-test('email login keeps its return route and isolates drafts when entering and leaving a connected account', async ({
+test('email login returns to the requested route and logout blocks drafts and preserves account data', async ({
   page,
 }) => {
   await page.route('**/auth/v1/token?grant_type=password', (route) =>
@@ -186,26 +183,50 @@ test('email login keeps its return route and isolates drafts when entering and l
   );
   await page.route('**/auth/v1/user', (route) => route.fulfill({ json: simulatedAuthUser }));
   await page.route('**/auth/v1/logout**', (route) => route.fulfill({ status: 204 }));
-  await ensurePersonalWorkspace(page);
-  await page
-    .getByRole('textbox', { name: 'Sua pergunta', exact: true })
-    .fill('Rascunho local antes do login');
-  await page.getByRole('button', { name: 'Entrar ou criar conta', exact: true }).click();
+  await page.goto('/ai');
+  await expect(page).toHaveURL(/\/account\?.*next=/);
+  expect(new URL(page.url()).searchParams.get('next')).toBe('/ai');
+  await page.evaluate(() => localStorage.setItem('cortexa:introduction:v1:chat', 'seen'));
   await page.getByRole('textbox', { name: 'E-mail', exact: true }).fill(simulatedAuthUser.email);
   // Older accounts can have a valid password shorter than today's sign-up minimum.
   await page.getByRole('textbox', { name: 'Senha', exact: true }).fill('old123');
   await page.getByRole('button', { name: 'Entrar', exact: true }).click();
   await expect(page).toHaveURL(/\/ai(?:\?|$)/);
   await expect(page.getByRole('textbox', { name: 'Sua pergunta', exact: true })).toHaveValue('');
+  await page.goto('/profile-edit');
+  await page
+    .getByRole('textbox', { name: 'Como você quer ser chamado?', exact: true })
+    .fill('Conta de teste');
+  await page.getByRole('button', { name: 'Salvar perfil', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (key) => JSON.parse(localStorage.getItem(key) ?? '{}').user?.name,
+        personalStorageKey,
+      ),
+    )
+    .toBe('Conta de teste');
+  await page.goto('/ai');
   await page
     .getByRole('textbox', { name: 'Sua pergunta', exact: true })
     .fill('Rascunho privado da conta');
   await page.getByRole('tab', { name: 'Perfil', exact: true }).click();
   await page.getByRole('button', { name: 'Gerenciar conta', exact: true }).click();
   await page.getByRole('button', { name: 'Sair da conta', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'E-mail', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Continuar sem conta', exact: true }).click();
-  await page.getByRole('tab', { name: 'Conversar', exact: true }).click();
+  await page.goto('/ai');
+  await expect(page).toHaveURL(/\/account\?.*next=/);
+  await expect(page.getByRole('textbox', { name: 'Sua pergunta', exact: true })).toHaveCount(0);
+  expect(await page.evaluate((key) => localStorage.getItem(key), authStorageKey)).toBeNull();
+  expect(
+    await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(key) ?? '{}').user?.name,
+      personalStorageKey,
+    ),
+  ).toBe('Conta de teste');
+  await page.getByRole('textbox', { name: 'E-mail', exact: true }).fill(simulatedAuthUser.email);
+  await page.getByRole('textbox', { name: 'Senha', exact: true }).fill('old123');
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await expect(page).toHaveURL(/\/ai$/);
   await expect(page.getByRole('textbox', { name: 'Sua pergunta', exact: true })).toHaveValue('');
 });
 
@@ -238,16 +259,12 @@ test('an invalid callback can recover with email login without reusing the faile
 test('personal chat routes an unauthenticated learner to account access and preserves its return route', async ({
   page,
 }) => {
-  await ensurePersonalWorkspace(page);
-  await page.goto('/ai');
-
-  await expect(
-    page.getByText(
-      'Entre para enviar perguntas ao Gemini. Evite dados identificáveis de pacientes.',
-      { exact: true },
-    ),
-  ).toBeVisible();
-  await page.getByRole('button', { name: 'Entrar ou criar conta', exact: true }).click();
+  await page.goto('/ai?topicId=acid&prompt=Revisar');
   await expect(page).toHaveURL(/\/account\?.*next=/);
+  const next = new URL(new URL(page.url()).searchParams.get('next')!, 'http://localhost:8081');
+  expect(next.pathname).toBe('/ai');
+  expect(next.searchParams.get('topicId')).toBe('acid');
+  expect(next.searchParams.get('prompt')).toBe('Revisar');
+  await expect(page.getByRole('textbox', { name: 'Sua pergunta', exact: true })).toHaveCount(0);
   await expect(page.getByRole('textbox', { name: 'E-mail', exact: true })).toBeVisible();
 });
